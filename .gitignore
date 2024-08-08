@@ -50,3 +50,10 @@ modules.order
 Module.symvers
 Mkfile.old
 dkms.conf
+
+bld/
+frybox
+frybox.exe
+win/frybox.exe
+*shell-see.*
+*sqlite3-see.*
