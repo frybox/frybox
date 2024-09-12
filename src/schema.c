@@ -83,7 +83,7 @@ const char zRepositorySchema1[] =
 @ -- The PARTIAL table contains all partial nodes in the partial directory.
 @ CREATE TABLE partial(
 @   uuid TEXT UNIQUE NOT NULL,      -- Hash of the node
-@   size INTEGER,                   -- Size of content.
+@   size INTEGER,                   -- Current size of current content.
 @   total INTEGER                   -- Total size of this transaction.
 @ );
 @

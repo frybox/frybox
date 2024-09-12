@@ -128,11 +128,9 @@ static void peer_need(Blob *pHash){
 ** Any artifact successfully received by this routine is considered to
 ** be public and is therefore removed from the "private" table.
 */
-static void xfer_accept_file(
+static void xfer_accept_node(
   Xfer *pXfer,
-  int cloneFlag,
-  char **pzUuidList,
-  int *pnUuidList
+  int cloneFlag
 ){
   int n;
   int rid;
@@ -176,8 +174,6 @@ static void xfer_accept_file(
     }
     rid = content_put_ex(&content, blob_str(pUuid), srcid,
                          0, isPriv);
-    Th_AppendToList(pzUuidList, pnUuidList, blob_str(pUuid),
-                    blob_size(pUuid));
     peer_have(rid);
     blob_reset(&content);
     return;
@@ -188,8 +184,6 @@ static void xfer_accept_file(
     if( content_get(srcid, &src)==0 ){
       rid = content_put_ex(&content, blob_str(pUuid), srcid,
                            0, isPriv);
-      Th_AppendToList(pzUuidList, pnUuidList, blob_str(pUuid),
-                      blob_size(pUuid));
       pXfer->nDanglingFile++;
       db_multi_exec("DELETE FROM phantom WHERE rid=%d", rid);
       if( !isPriv ) content_make_public(rid);
@@ -209,7 +203,6 @@ static void xfer_accept_file(
     blob_appendf(&pXfer->err, "wrong hash on received artifact: %b", pUuid);
   }
   rid = content_put_ex(&content, blob_str(pUuid), 0, 0, isPriv);
-  Th_AppendToList(pzUuidList, pnUuidList, blob_str(pUuid), blob_size(pUuid));
   if( rid==0 ){
     blob_appendf(&pXfer->err, "%s", g.zErrMsg);
     blob_reset(&content);
@@ -220,308 +213,6 @@ static void xfer_accept_file(
   assert( blob_is_reset(&content) );
   peer_have(rid);
 }
-
-/*
-** The aToken[0..nToken-1] blob array is a parse of a "cfile" line
-** message.  This routine finishes parsing that message and does
-** a record insert of the file.  The difference between "file" and
-** "cfile" is that with "cfile" the content is already compressed.
-**
-** The file line is in one of the following two forms:
-**
-**      cfile HASH USIZE CSIZE \n CONTENT
-**      cfile HASH DELTASRC USIZE CSIZE \n CONTENT
-**
-** The content is CSIZE bytes immediately following the newline.
-** If DELTASRC exists, then the CONTENT is a delta against the
-** content of DELTASRC.
-**
-** The original size of the HASH artifact is USIZE.
-**
-** If any error occurs, write a message into pErr which has already
-** be initialized to an empty string.
-**
-** Any artifact successfully received by this routine is considered to
-** be public and is therefore removed from the "private" table.
-*/
-static void xfer_accept_compressed_file(
-  Xfer *pXfer,
-  char **pzUuidList,
-  int *pnUuidList
-){
-  int szC;   /* CSIZE */
-  int szU;   /* USIZE */
-  int rid;
-  int srcid = 0;
-  Blob content;
-  int isPriv;
-
-  isPriv = pXfer->nextIsPrivate;
-  pXfer->nextIsPrivate = 0;
-  if( pXfer->nToken<4
-   || pXfer->nToken>5
-   || !blob_is_hname(&pXfer->aToken[1])
-   || !blob_is_int(&pXfer->aToken[pXfer->nToken-2], &szU)
-   || !blob_is_int(&pXfer->aToken[pXfer->nToken-1], &szC)
-   || szC<0 || szU<0
-   || (pXfer->nToken==5 && !blob_is_hname(&pXfer->aToken[2]))
-  ){
-    blob_appendf(&pXfer->err, "malformed cfile line");
-    return;
-  }
-  if( isPriv && !g.perm.Private ){
-    /* Do not accept private files if not authorized */
-    return;
-  }
-  blob_zero(&content);
-  blob_extract(pXfer->pIn, szC, &content);
-  if( uuid_is_shunned(blob_str(&pXfer->aToken[1])) ){
-    /* Ignore files that have been shunned */
-    blob_reset(&content);
-    return;
-  }
-  if( pXfer->nToken==5 ){
-    srcid = rid_from_uuid(&pXfer->aToken[2], 1, isPriv);
-    pXfer->nDeltaRcvd++;
-  }else{
-    srcid = 0;
-    pXfer->nFileRcvd++;
-  }
-  rid = content_put_ex(&content, blob_str(&pXfer->aToken[1]), srcid,
-                       szC, isPriv);
-  Th_AppendToList(pzUuidList, pnUuidList, blob_str(&pXfer->aToken[1]),
-                  blob_size(&pXfer->aToken[1]));
-  peer_have(rid);
-  blob_reset(&content);
-}
-
-/*
-** The aToken[0..nToken-1] blob array is a parse of a "uvfile" line
-** message.  This routine finishes parsing that message and adds the
-** unversioned file to the "unversioned" table.
-**
-** The file line is in one of the following two forms:
-**
-**      uvfile NAME MTIME HASH SIZE FLAGS
-**      uvfile NAME MTIME HASH SIZE FLAGS \n CONTENT
-**
-** If the 0x0001 bit of FLAGS is set, that means the file has been
-** deleted, SIZE is zero, the HASH is "-", and the "\n CONTENT" is omitted.
-**
-** SIZE is the number of bytes of CONTENT.  The CONTENT is uncompressed.
-** HASH is the artifact hash of CONTENT.
-**
-** If the 0x0004 bit of FLAGS is set, that means the CONTENT is omitted.
-** The sender might have omitted the content because it is too big to
-** transmit, or because it is unchanged and this record exists purely
-** to update the MTIME.
-*/
-static void xfer_accept_unversioned_file(Xfer *pXfer, int isWriter){
-  sqlite3_int64 mtime;    /* The MTIME */
-  Blob *pHash;            /* The HASH value */
-  int sz;                 /* The SIZE */
-  int flags;              /* The FLAGS */
-  Blob content;           /* The CONTENT */
-  Blob x;                 /* Compressed content */
-  Stmt q;                 /* SQL statements for comparison and insert */
-  int isDelete;           /* HASH is "-" indicating this is a delete */
-  int nullContent;        /* True of CONTENT is NULL */
-  int iStatus;            /* Result from unversioned_status() */
-
-  pHash = &pXfer->aToken[3];
-  if( pXfer->nToken==5
-   || !blob_is_filename(&pXfer->aToken[1])
-   || !blob_is_int64(&pXfer->aToken[2], &mtime)
-   || (!blob_eq(pHash,"-") && !blob_is_hname(pHash))
-   || !blob_is_int(&pXfer->aToken[4], &sz)
-   || !blob_is_int(&pXfer->aToken[5], &flags)
-  ){
-    blob_appendf(&pXfer->err, "malformed uvfile line");
-    return;
-  }
-  blob_init(&content, 0, 0);
-  blob_init(&x, 0, 0);
-  if( sz>0 && (flags & 0x0005)==0 ){
-    blob_extract(pXfer->pIn, sz, &content);
-    nullContent = 0;
-    if( hname_verify_hash(&content, blob_buffer(pHash), blob_size(pHash))==0 ){
-      blob_appendf(&pXfer->err, "in uvfile line, HASH does not match CONTENT");
-      goto end_accept_unversioned_file;
-    }
-  }else{
-    nullContent = 1;
-  }
-
-  /* The isWriter flag must be true in order to land the new file */
-  if( !isWriter ){
-    blob_appendf(&pXfer->err,"Write permissions for unversioned files missing");
-    goto end_accept_unversioned_file;
-  }
-
-  /* Make sure we have a valid g.rcvid marker */
-  content_rcvid_init(0);
-
-  /* Check to see if current content really should be overwritten.  Ideally,
-  ** a uvfile card should never have been sent unless the overwrite should
-  ** occur.  But do not trust the sender.  Double-check.
-  */
-  iStatus = unversioned_status(blob_str(&pXfer->aToken[1]), mtime,
-                               blob_str(pHash));
-  if( iStatus>=3 ) goto end_accept_unversioned_file;
-
-  /* Store the content */
-  isDelete = blob_eq(pHash, "-");
-  if( isDelete ){
-    db_prepare(&q,
-      "UPDATE unversioned"
-      "   SET rcvid=:rcvid, mtime=:mtime, hash=NULL,"
-      "       sz=0, encoding=0, content=NULL"
-      " WHERE name=:name"
-    );
-    db_bind_int(&q, ":rcvid", g.rcvid);
-  }else if( iStatus==2 ){
-    db_prepare(&q, "UPDATE unversioned SET mtime=:mtime WHERE name=:name");
-  }else{
-    db_prepare(&q,
-      "REPLACE INTO unversioned(name,rcvid,mtime,hash,sz,encoding,content)"
-      " VALUES(:name,:rcvid,:mtime,:hash,:sz,:encoding,:content)"
-    );
-    db_bind_int(&q, ":rcvid", g.rcvid);
-    db_bind_text(&q, ":hash", blob_str(pHash));
-    db_bind_int(&q, ":sz", blob_size(&content));
-    if( !nullContent ){
-      blob_compress(&content, &x);
-      if( blob_size(&x) < 0.8*blob_size(&content) ){
-        db_bind_blob(&q, ":content", &x);
-        db_bind_int(&q, ":encoding", 1);
-      }else{
-        db_bind_blob(&q, ":content", &content);
-        db_bind_int(&q, ":encoding", 0);
-      }
-    }else{
-      db_bind_int(&q, ":encoding", 0);
-    }
-  }
-  db_bind_text(&q, ":name", blob_str(&pXfer->aToken[1]));
-  db_bind_int64(&q, ":mtime", mtime);
-  db_step(&q);
-  db_finalize(&q);
-  db_unset("uv-hash", 0);
-
-end_accept_unversioned_file:
-  blob_reset(&x);
-  blob_reset(&content);
-}
-
-/*
-** Try to send a file as a delta against its parent.
-** If successful, return the number of bytes in the delta.
-** If we cannot generate an appropriate delta, then send
-** nothing and return zero.
-**
-** Never send a delta against a private artifact.
-*/
-static int send_delta_parent(
-  Xfer *pXfer,            /* The transfer context */
-  int rid,                /* record id of the file to send */
-  int isPrivate,          /* True if rid is a private artifact */
-  Blob *pContent,         /* The content of the file to send */
-  Blob *pUuid             /* The HASH of the file to send */
-){
-  static const char *const azQuery[] = {
-    "SELECT pid FROM plink x"
-    " WHERE cid=%d"
-    "   AND NOT EXISTS(SELECT 1 FROM phantom WHERE rid=pid)",
-
-    "SELECT pid, min(mtime) FROM mlink, event ON mlink.mid=event.objid"
-    " WHERE fid=%d"
-    "   AND NOT EXISTS(SELECT 1 FROM phantom WHERE rid=pid)"
-  };
-  int i;
-  Blob src, delta;
-  int size = 0;
-  int srcId = 0;
-
-  for(i=0; srcId==0 && i<count(azQuery); i++){
-    srcId = db_int(0, azQuery[i] /*works-like:"%d"*/, rid);
-  }
-  if( srcId>0
-   && (pXfer->syncPrivate || !content_is_private(srcId))
-   && content_get(srcId, &src)
-  ){
-    char *zUuid = db_text(0, "SELECT uuid FROM blob WHERE rid=%d", srcId);
-    blob_delta_create(&src, pContent, &delta);
-    size = blob_size(&delta);
-    if( size>=(int)blob_size(pContent)-50 ){
-      size = 0;
-    }else if( uuid_is_shunned(zUuid) ){
-      size = 0;
-    }else{
-       if( isPrivate ) blob_append(pXfer->pOut, "private\n", -1);
-      blob_appendf(pXfer->pOut, "file %b %s %d\n", pUuid, zUuid, size);
-      blob_append(pXfer->pOut, blob_buffer(&delta), size);
-    }
-    blob_reset(&delta);
-    free(zUuid);
-    blob_reset(&src);
-  }
-  return size;
-}
-
-/*
-** Try to send a file as a native delta.
-** If successful, return the number of bytes in the delta.
-** If we cannot generate an appropriate delta, then send
-** nothing and return zero.
-**
-** Never send a delta against a private artifact.
-*/
-static int send_delta_native(
-  Xfer *pXfer,            /* The transfer context */
-  int rid,                /* record id of the file to send */
-  int isPrivate,          /* True if rid is a private artifact */
-  Blob *pUuid             /* The HASH of the file to send */
-){
-  Blob src, delta;
-  int size = 0;
-  int srcId;
-
-  srcId = db_int(0, "SELECT srcid FROM delta WHERE rid=%d", rid);
-  if( srcId>0
-   && (pXfer->syncPrivate || !content_is_private(srcId))
-  ){
-    blob_zero(&src);
-    db_blob(&src, "SELECT uuid FROM blob WHERE rid=%d", srcId);
-    if( uuid_is_shunned(blob_str(&src)) ){
-      blob_reset(&src);
-      return 0;
-    }
-    blob_zero(&delta);
-    db_blob(&delta, "SELECT content FROM blob WHERE rid=%d", rid);
-    blob_uncompress(&delta, &delta);
-    if( isPrivate ) blob_append(pXfer->pOut, "private\n", -1);
-    blob_appendf(pXfer->pOut, "file %b %b %d\n",
-                pUuid, &src, blob_size(&delta));
-    blob_append(pXfer->pOut, blob_buffer(&delta), blob_size(&delta));
-    size = blob_size(&delta);
-    blob_reset(&delta);
-    blob_reset(&src);
-  }else{
-    size = 0;
-  }
-  return size;
-}
-
-/*
-** Push an error message to alert the older client that the repository
-** has SHA3 content and cannot be synced or cloned.
-*/
-static void xfer_cannot_send_sha3_error(Xfer *pXfer){
-  blob_appendf(pXfer->pOut,
-    "error Fossil\\sversion\\s2.0\\sor\\slater\\srequired.\n"
-  );
-}
-
 
 /*
 ** Send the file identified by rid.
@@ -536,7 +227,7 @@ static void xfer_cannot_send_sha3_error(Xfer *pXfer){
 ** as a precaution, this routine does check on rid and if it is private
 ** this routine becomes a no-op.
 */
-static void send_file(Xfer *pXfer, int rid, Blob *pUuid, int nativeDelta){
+static void send_node(Xfer *pXfer, int rid, Blob *pUuid, int nativeDelta){
   Blob content, uuid;
   int size = 0;
   int isPriv = content_is_private(rid);
@@ -619,159 +310,21 @@ static void send_file(Xfer *pXfer, int rid, Blob *pUuid, int nativeDelta){
 }
 
 /*
-** Send the file identified by rid as a compressed artifact.  Basically,
-** send the content exactly as it appears in the BLOB table using
-** a "cfile" card.
-*/
-static void send_compressed_file(Xfer *pXfer, int rid){
-  const char *zContent;
-  const char *zUuid;
-  const char *zDelta;
-  int szU;
-  int szC;
-  int rc;
-  int isPrivate;
-  int srcIsPrivate;
-  static Stmt q1;
-  Blob fullContent;
-
-  isPrivate = content_is_private(rid);
-  if( isPrivate && pXfer->syncPrivate==0 ) return;
-  db_static_prepare(&q1,
-    "SELECT uuid, size, content, delta.srcid IN private,"
-         "  (SELECT uuid FROM blob WHERE rid=delta.srcid)"
-    " FROM blob LEFT JOIN delta ON (blob.rid=delta.rid)"
-    " WHERE blob.rid=:rid"
-    "   AND blob.size>=0"
-    "   AND NOT EXISTS(SELECT 1 FROM shun WHERE shun.uuid=blob.uuid)"
-  );
-  db_bind_int(&q1, ":rid", rid);
-  rc = db_step(&q1);
-  if( rc==SQLITE_ROW ){
-    zUuid = db_column_text(&q1, 0);
-    szU = db_column_int(&q1, 1);
-    szC = db_column_bytes(&q1, 2);
-    zContent = db_column_raw(&q1, 2);
-    srcIsPrivate = db_column_int(&q1, 3);
-    zDelta = db_column_text(&q1, 4);
-    if( isPrivate ) blob_append(pXfer->pOut, "private\n", -1);
-    if( pXfer->remoteVersion<20000 && db_column_bytes(&q1,0)!=HNAME_LEN_SHA1 ){
-      xfer_cannot_send_sha3_error(pXfer);
-      db_reset(&q1);
-      return;
-    }
-    blob_appendf(pXfer->pOut, "cfile %s ", zUuid);
-    if( !isPrivate && srcIsPrivate ){
-      content_get(rid, &fullContent);
-      szU = blob_size(&fullContent);
-      blob_compress(&fullContent, &fullContent);
-      szC = blob_size(&fullContent);
-      zContent = blob_buffer(&fullContent);
-      zDelta = 0;
-    }
-    if( zDelta ){
-      blob_appendf(pXfer->pOut, "%s ", zDelta);
-      pXfer->nDeltaSent++;
-    }else{
-      pXfer->nFileSent++;
-    }
-    blob_appendf(pXfer->pOut, "%d %d\n", szU, szC);
-    blob_append(pXfer->pOut, zContent, szC);
-    if( blob_buffer(pXfer->pOut)[blob_size(pXfer->pOut)-1]!='\n' ){
-      blob_append(pXfer->pOut, "\n", 1);
-    }
-    if( !isPrivate && srcIsPrivate ){
-      blob_reset(&fullContent);
-    }
-  }
-  db_reset(&q1);
-}
-
-/*
-** Send the unversioned file identified by zName by generating the
-** appropriate "uvfile" card.
+** Send a INEED card for every partial node.
 **
-**     uvfile NAME MTIME HASH SIZE FLAGS \n CONTENT
-**
-** If the noContent flag is set, omit the CONTENT and set the 0x0004
-** flag in FLAGS.
+** This is the only place that send INEED cards.
 */
-static void send_unversioned_file(
-  Xfer *pXfer,            /* Transfer context */
-  const char *zName,      /* Name of unversioned file to be sent */
-  int noContent           /* True to omit the content */
-){
-  Stmt q1;
-
-  if( (int)blob_size(pXfer->pOut)>=pXfer->mxSend ) noContent = 1;
-  if( noContent ){
-    db_prepare(&q1,
-      "SELECT mtime, hash, encoding, sz FROM unversioned WHERE name=%Q",
-      zName
-    );
-  }else{
-    db_prepare(&q1,
-      "SELECT mtime, hash, encoding, sz, content FROM unversioned"
-      " WHERE name=%Q",
-      zName
-    );
-  }
-  if( db_step(&q1)==SQLITE_ROW ){
-    sqlite3_int64 mtime = db_column_int64(&q1, 0);
-    const char *zHash = db_column_text(&q1, 1);
-    if( pXfer->remoteVersion<20000 && db_column_bytes(&q1,1)>HNAME_LEN_SHA1 ){
-      xfer_cannot_send_sha3_error(pXfer);
-      db_reset(&q1);
-      return;
-    }
-    if( (int)blob_size(pXfer->pOut)>=pXfer->mxSend ){
-      /* If we have already reached the send size limit, send a (short)
-      ** uvihave card rather than a uvfile card.  This only happens on the
-      ** server side.  The uvigot card will provoke the client to resend
-      ** another uvgimme on the next cycle. */
-      blob_appendf(pXfer->pOut, "uvigot %s %lld %s %d\n",
-                   zName, mtime, zHash, db_column_int(&q1,3));
-    }else{
-      blob_appendf(pXfer->pOut, "uvfile %s %lld", zName, mtime);
-      if( zHash==0 ){
-        blob_append(pXfer->pOut, " - 0 1\n", -1);
-      }else if( noContent ){
-        blob_appendf(pXfer->pOut, " %s %d 4\n", zHash, db_column_int(&q1,3));
-      }else{
-        Blob content;
-        blob_init(&content, 0, 0);
-        db_column_blob(&q1, 4, &content);
-        if( db_column_int(&q1, 2) ){
-          blob_uncompress(&content, &content);
-        }
-        blob_appendf(pXfer->pOut, " %s %d 0\n", zHash, blob_size(&content));
-        blob_append(pXfer->pOut, blob_buffer(&content), blob_size(&content));
-        blob_reset(&content);
-      }
-    }
-  }
-  db_finalize(&q1);
-}
-
-/*
-** Send a gimme message for every phantom.
-**
-** Except: do not request shunned artifacts.  And do not request
-** private artifacts if we are not doing a private transfer.
-*/
-static void request_phantoms(Xfer *pXfer, int maxReq){
+static void request_partials(Xfer *pXfer, int maxReq){
   Stmt q;
   db_prepare(&q,
-    "SELECT uuid FROM phantom CROSS JOIN blob USING(rid) /*scan*/"
-    " WHERE NOT EXISTS(SELECT 1 FROM unk WHERE unk.uuid=blob.uuid)"
-    "   AND NOT EXISTS(SELECT 1 FROM shun WHERE uuid=blob.uuid) %s",
-    (pXfer->syncPrivate ? "" :
-         "   AND NOT EXISTS(SELECT 1 FROM private WHERE rid=blob.rid)")
+    "SELECT uuid, size FROM partial"
+    " WHERE NOT EXISTS(SELECT 1 FROM peerneed WHERE peerneed.uuid=partial.uuid)"
   );
   while( db_step(&q)==SQLITE_ROW && maxReq-- > 0 ){
     const char *zUuid = db_column_text(&q, 0);
-    blob_appendf(pXfer->pOut, "gimme %s\n", zUuid);
-    pXfer->nGimmeSent++;
+    int size = db_column_int(&q, 1);
+    blob_appendf(pXfer->pOut, "ineed %s %d\n", zUuid, size);
+    pXfer->nINeedSent++;
   }
   db_finalize(&q);
 }
@@ -1779,7 +1332,7 @@ void page_xfer(void){
         nErr++;
       }
     }
-    request_phantoms(&xfer, 500);
+    request_partials(&xfer, 500);
   }
   if( zUuidList ){
     Th_Free(g.interp, zUuidList);
@@ -2155,7 +1708,7 @@ int client_sync(
     if( (syncFlags & SYNC_PULL)!=0
      || ((syncFlags & SYNC_CLONE)!=0 && cloneSeqno==1)
     ){
-      request_phantoms(&xfer, mxPhantomReq);
+      request_partials(&xfer, mxPhantomReq);
     }
     if( syncFlags & SYNC_PUSH ){
       send_unsent(&xfer);
