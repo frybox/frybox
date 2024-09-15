@@ -86,11 +86,11 @@ static int rid_from_uuid(Blob *pUuid, int phantomize, int isPrivate){
 ** Remember that the other side of the connection already has a copy
 ** of the node nid.
 */
-static void peer_has(int nid){
+static void peer_have(int nid){
   if( nid ){
     static Stmt q;
-    db_static_prepare(&q, "INSERT OR IGNORE INTO peerhave VALUES(:node)");
-    db_bind_int(&q, ":node", nid);
+    db_static_prepare(&q, "INSERT OR IGNORE INTO peerhave VALUES(:n)");
+    db_bind_int(&q, ":n", nid);
     db_step(&q);
     db_reset(&q);
   }
