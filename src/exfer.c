@@ -245,7 +245,7 @@ static void send_node(Xfer *pXfer, int rid, Blob *pUuid, int nativeDelta){
     }
     return;
   }
-  if( db_exists("SELECT 1 FROM onremote WHERE rid=%d", rid) ){
+  if( db_exists("SELECT 1 FROM peerhave WHERE rid=%d", rid) ){
      return;
   }
   blob_zero(&uuid);
