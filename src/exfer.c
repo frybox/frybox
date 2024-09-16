@@ -455,13 +455,11 @@ static void send_unsent(Xfer *pXfer){
 }
 
 /*
-** Check to see if the number of unclustered entries is greater than
-** 100 and if it is, form a new cluster.  Unclustered phantoms do not
-** count toward the 100 total.  And phantoms are never added to a new
-** cluster.
+** Check to see if the number of root entries is greater than
+** 100 and if it is, form a new list.
 */
-void create_cluster(void){
-  Blob cluster, cksum;
+void create_list_node(void){
+  Blob listnode, cksum;
   Blob deleteWhere;
   Stmt q;
   int nUncl;
@@ -476,28 +474,23 @@ void create_cluster(void){
   );
 #endif
 
-  nUncl = db_int(0, "SELECT count(*) FROM unclustered /*scan*/"
-                    " WHERE NOT EXISTS(SELECT 1 FROM phantom"
-                                      " WHERE rid=unclustered.rid)");
+  nUncl = db_int(0, "SELECT count(*) FROM root /*scan*/");
   if( nUncl>=100 ){
-    blob_zero(&cluster);
+    blob_zero(&listnode);
     blob_zero(&deleteWhere);
-    db_prepare(&q, "SELECT uuid FROM unclustered, blob"
-                   " WHERE NOT EXISTS(SELECT 1 FROM phantom"
-                   "                   WHERE rid=unclustered.rid)"
-                   "   AND unclustered.rid=blob.rid"
-                   "   AND NOT EXISTS(SELECT 1 FROM shun WHERE uuid=blob.uuid)"
+    db_prepare(&q, "SELECT uuid FROM root, node"
+                   " WHERE root.nid=node.nid"
                    " ORDER BY 1");
     while( db_step(&q)==SQLITE_ROW ){
-      blob_appendf(&cluster, "M %s\n", db_column_text(&q, 0));
+      blob_appendf(&listnode, "M %s\n", db_column_text(&q, 0));
       nRow++;
       if( nRow>=800 && nUncl>nRow+100 ){
-        md5sum_blob(&cluster, &cksum);
-        blob_appendf(&cluster, "Z %b\n", &cksum);
+        md5sum_blob(&listnode, &cksum);
+        blob_appendf(&listnode, "Z %b\n", &cksum);
         blob_reset(&cksum);
-        rid = content_put(&cluster);
-        manifest_crosslink(rid, &cluster, MC_NONE);
-        blob_reset(&cluster);
+        // TODO 改为保存到node表和nodes文件中
+        // rid = content_put(&listnode);
+        blob_reset(&listnode);
         nUncl -= nRow;
         nRow = 0;
         blob_append_sql(&deleteWhere, ",%d", rid);
@@ -505,18 +498,17 @@ void create_cluster(void){
     }
     db_finalize(&q);
     db_multi_exec(
-      "DELETE FROM unclustered WHERE rid NOT IN (0 %s)"
-      "   AND NOT EXISTS(SELECT 1 FROM phantom WHERE rid=unclustered.rid)",
+      "DELETE FROM root WHERE nid NOT IN (0 %s)",
       blob_sql_text(&deleteWhere)
     );
     blob_reset(&deleteWhere);
     if( nRow>0 ){
-      md5sum_blob(&cluster, &cksum);
-      blob_appendf(&cluster, "Z %b\n", &cksum);
+      md5sum_blob(&listnode, &cksum);
+      blob_appendf(&listnode, "Z %b\n", &cksum);
       blob_reset(&cksum);
-      rid = content_put(&cluster);
-      manifest_crosslink(rid, &cluster, MC_NONE);
-      blob_reset(&cluster);
+      // TODO 改为保存到node表和nodes文件中
+      // rid = content_put(&listnode);
+      blob_reset(&listnode);
     }
   }
 }
@@ -1348,7 +1340,7 @@ void page_xfer(void){
     send_all(&xfer);
     if( xfer.syncPrivate ) send_private(&xfer);
   }else if( isPull ){
-    create_cluster();
+    create_list_node();
     send_unclustered(&xfer);
     if( xfer.syncPrivate ) send_private(&xfer);
   }
@@ -1711,7 +1703,8 @@ int client_sync(
       request_partials(&xfer, mxPhantomReq);
     }
     if( syncFlags & SYNC_PUSH ){
-      send_unsent(&xfer);
+      // frybox暂时不支持unsent优化
+      // send_unsent(&xfer);
       nCardSent += send_unclustered(&xfer);
       if( syncFlags & SYNC_PRIVATE ) send_private(&xfer);
     }
