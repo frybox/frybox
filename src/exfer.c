@@ -545,7 +545,7 @@ static int send_private(Xfer *pXfer){
 ** sync and all artifacts that don't meet the restrictions above should
 ** be sent.
 */
-static int send_unclustered(Xfer *pXfer){
+static int send_root(Xfer *pXfer){
   Stmt q;
   int cnt = 0;
   const char *zExtra;
@@ -1341,7 +1341,7 @@ void page_xfer(void){
     if( xfer.syncPrivate ) send_private(&xfer);
   }else if( isPull ){
     create_list_node();
-    send_unclustered(&xfer);
+    send_root(&xfer);
     if( xfer.syncPrivate ) send_private(&xfer);
   }
   hook_expecting_more_artifacts(xfer.nGimmeSent?60:0);
@@ -1705,7 +1705,7 @@ int client_sync(
     if( syncFlags & SYNC_PUSH ){
       // frybox暂时不支持unsent优化
       // send_unsent(&xfer);
-      nCardSent += send_unclustered(&xfer);
+      nCardSent += send_root(&xfer);
       if( syncFlags & SYNC_PRIVATE ) send_private(&xfer);
     }
 
