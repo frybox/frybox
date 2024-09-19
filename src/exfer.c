@@ -64,11 +64,11 @@ struct Xfer {
 ** Compare to uuid_to_rid().  This routine takes a blob argument
 ** and does less error checking.
 */
-static int rid_from_uuid(Blob *pUuid, int phantomize, int isPrivate){
+static int rid_from_uuid(Blob *pUuid, int partial, int isPrivate){
   static Stmt q;
   int rid;
 
-  db_static_prepare(&q, "SELECT rid FROM blob WHERE uuid=:uuid");
+  db_static_prepare(&q, "SELECT nid FROM node WHERE uuid=:uuid");
   db_bind_str(&q, ":uuid", pUuid);
   if( db_step(&q)==SQLITE_ROW ){
     rid = db_column_int(&q, 0);
@@ -549,32 +549,27 @@ static int send_root(Xfer *pXfer){
   Stmt q;
   int cnt = 0;
   const char *zExtra;
-  if( db_table_exists("temp","onremote") ){
-    zExtra = " AND NOT EXISTS(SELECT 1 FROM onremote WHERE rid=blob.rid)";
+  if( db_table_exists("temp","peerhave") ){
+    zExtra = " AND NOT EXISTS(SELECT 1 FROM peerhave WHERE uuid=node.uuid)";
   }else{
     zExtra = "";
   }
   if( pXfer->resync ){
     db_prepare(&q,
-      "SELECT uuid, rid FROM blob"
-      " WHERE NOT EXISTS(SELECT 1 FROM shun WHERE uuid=blob.uuid)"
-      "   AND NOT EXISTS(SELECT 1 FROM phantom WHERE rid=blob.rid)"
-      "   AND NOT EXISTS(SELECT 1 FROM private WHERE rid=blob.rid)%s"
-      "   AND blob.rid<=%d"
-      " ORDER BY blob.rid DESC",
-      zExtra /*safe-for-%s*/, pXfer->resync
+      "SELECT uuid, nid FROM node"
+      " WHERE node.nid<=%d%s"
+      " ORDER BY node.nid DESC",
+      pXfer->resync, zExtra /*safe-for-%s*/
     );
   }else{
     db_prepare(&q,
-      "SELECT uuid FROM unclustered JOIN blob USING(rid) /*scan*/"
-      " WHERE NOT EXISTS(SELECT 1 FROM shun WHERE uuid=blob.uuid)"
-      "   AND NOT EXISTS(SELECT 1 FROM phantom WHERE rid=blob.rid)"
-      "   AND NOT EXISTS(SELECT 1 FROM private WHERE rid=blob.rid)%s",
+      "SELECT uuid FROM root JOIN node USING(nid) /*scan*/"
+      " WHERE 1%s",
       zExtra /*safe-for-%s*/
     );
   }
   while( db_step(&q)==SQLITE_ROW ){
-    blob_appendf(pXfer->pOut, "igot %s\n", db_column_text(&q, 0));
+    blob_appendf(pXfer->pOut, "ihave %s\n", db_column_text(&q, 0));
     cnt++;
     if( pXfer->resync && pXfer->mxSend<(int)blob_size(pXfer->pOut) ){
       pXfer->resync = db_column_int(&q, 1)-1;
@@ -586,53 +581,17 @@ static int send_root(Xfer *pXfer){
 }
 
 /*
-** Send an igot message for every artifact.
+** Send an ihave message for every artifact.
 */
 static void send_all(Xfer *pXfer){
   Stmt q;
   db_prepare(&q,
-    "SELECT uuid FROM blob "
-    " WHERE NOT EXISTS(SELECT 1 FROM shun WHERE uuid=blob.uuid)"
-    "   AND NOT EXISTS(SELECT 1 FROM private WHERE rid=blob.rid)"
-    "   AND NOT EXISTS(SELECT 1 FROM phantom WHERE rid=blob.rid)"
+    "SELECT uuid FROM node"
   );
   while( db_step(&q)==SQLITE_ROW ){
-    blob_appendf(pXfer->pOut, "igot %s\n", db_column_text(&q, 0));
+    blob_appendf(pXfer->pOut, "ihave %s\n", db_column_text(&q, 0));
   }
   db_finalize(&q);
-}
-
-/*
-** pXfer is a "pragma uv-hash HASH" card.
-**
-** If HASH is different from the unversioned content hash on this server,
-** then send a bunch of uvigot cards, one for each entry unversioned file
-** on this server.
-*/
-static void send_unversioned_catalog(Xfer *pXfer){
-  Stmt uvq;
-  unversioned_schema();
-  db_prepare(&uvq,
-     "SELECT name, mtime, hash, sz FROM unversioned"
-  );
-  while( db_step(&uvq)==SQLITE_ROW ){
-    const char *zName = db_column_text(&uvq,0);
-    sqlite3_int64 mtime = db_column_int64(&uvq,1);
-    const char *zHash = db_column_text(&uvq,2);
-    int sz = db_column_int(&uvq,3);
-    if( zHash==0 ){ sz = 0; zHash = "-"; }
-    blob_appendf(pXfer->pOut, "uvigot %s %lld %s %d\n",
-                 zName, mtime, zHash, sz);
-  }
-  db_finalize(&uvq);
-}
-
-/*
-** Called when there is an attempt to transfer private content to and
-** from a server without authorization.
-*/
-static void server_private_xfer_not_authorized(void){
-  @ error not\sauthorized\sto\ssync\sprivate\scontent
 }
 
 /*
@@ -728,7 +687,7 @@ static int disableLogin = 0;
 
 /*
 ** The CGI/HTTP preprocessor always redirects requests with a content-type
-** of application/x-fossil or application/x-fossil-debug to this page,
+** of application/x-frybox or application/x-frybox-debug to this page,
 ** regardless of what path was specified in the HTTP header.  This allows
 ** clone clients to specify a URL that omits default pathnames, such
 ** as "http://fossil-scm.org/" instead of "http://fossil-scm.org/index.cgi".
@@ -746,7 +705,7 @@ void page_xfer(void){
   Xfer xfer;
   int deltaFlag = 0;
   int isClone = 0;
-  int nGimme = 0;
+  int nIneed = 0;
   int size;
   char *zNow;
   int rc;
@@ -861,15 +820,15 @@ void page_xfer(void){
       }
     }else
 
-    /*   gimme HASH
+    /*   ineed HASH
     **
     ** Client is requesting a file from the server.  Send it.
     */
-    if( blob_eq(&xfer.aToken[0], "gimme")
+    if( blob_eq(&xfer.aToken[0], "ineed")
      && xfer.nToken==2
      && blob_is_hname(&xfer.aToken[1])
     ){
-      nGimme++;
+      nIneed++;
       remote_unk(&xfer.aToken[1]);
       if( isPull ){
         int rid = rid_from_uuid(&xfer.aToken[1], 0, 0);
@@ -879,54 +838,19 @@ void page_xfer(void){
       }
     }else
 
-    /*   uvgimme NAME
+    /*   ihave HASH
     **
-    ** Client is requesting an unversioned file from the server.  Send it.
+    ** Client announces that it has a particular file.
     */
-    if( blob_eq(&xfer.aToken[0], "uvgimme")
-     && xfer.nToken==2
-     && blob_is_filename(&xfer.aToken[1])
-    ){
-      send_unversioned_file(&xfer, blob_str(&xfer.aToken[1]), 0);
-    }else
-
-    /*   igot HASH ?ISPRIVATE?
-    **
-    ** Client announces that it has a particular file.  If the ISPRIVATE
-    ** argument exists and is "1", then the file is a private file.
-    */
-    if( xfer.nToken>=2
-     && blob_eq(&xfer.aToken[0], "igot")
+    if( xfer.nToken==2
+     && blob_eq(&xfer.aToken[0], "ihave")
      && blob_is_hname(&xfer.aToken[1])
     ){
       if( isPush ){
         int rid = 0;
-        int isPriv = 0;
-        if( xfer.nToken==2 || blob_eq(&xfer.aToken[2],"1")==0 ){
-          /* Client says the artifact is public */
-          rid = rid_from_uuid(&xfer.aToken[1], 1, 0);
-        }else if( g.perm.Private ){
-          /* Client says the artifact is private and the client has
-          ** permission to push private content.  Create a new phantom
-          ** artifact that is marked private. */
-          rid = rid_from_uuid(&xfer.aToken[1], 1, 1);
-          isPriv = 1;
-        }else{
-          /* Client says the artifact is private and the client is unable
-          ** or unwilling to send us the artifact.  If we already hold the
-          ** artifact here on the server as a phantom, make sure that
-          ** phantom is marked as private so that we don't keep asking about
-          ** it in subsequent sync requests. */
-          rid = rid_from_uuid(&xfer.aToken[1], 0, 1);
-          isPriv = 1;
-        }
+        rid = rid_from_uuid(&xfer.aToken[1], 1, 0);
         if( rid ){
           peer_have(rid);
-          if( isPriv ){
-            content_make_private(rid);
-          }else{
-            content_make_public(rid);
-          }
         }
       }
     }else
@@ -1329,7 +1253,7 @@ void page_xfer(void){
   if( zUuidList ){
     Th_Free(g.interp, zUuidList);
   }
-  if( isClone && nGimme==0 ){
+  if( isClone && nIneed==0 ){
     /* The initial "clone" message from client to server contains no
     ** "gimme" cards. On that initial message, send the client an "igot"
     ** card for every artifact currently in the repository.  This will
