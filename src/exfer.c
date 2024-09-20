@@ -64,7 +64,7 @@ struct Xfer {
 ** Compare to uuid_to_rid().  This routine takes a blob argument
 ** and does less error checking.
 */
-static int rid_from_uuid(Blob *pUuid, int partial, int isPrivate){
+static int nid_from_uuid(Blob *pUuid, int partial, int isPrivate){
   static Stmt q;
   int rid;
 
@@ -166,7 +166,7 @@ static void xfer_accept_node(
   }
   if( cloneFlag ){
     if( pXfer->nToken==4 ){
-      srcid = rid_from_uuid(&pXfer->aToken[2], 1, isPriv);
+      srcid = nid_from_uuid(&pXfer->aToken[2], 1, isPriv);
       pXfer->nDeltaRcvd++;
     }else{
       srcid = 0;
@@ -180,7 +180,7 @@ static void xfer_accept_node(
   }
   if( pXfer->nToken==4 ){
     Blob src, next;
-    srcid = rid_from_uuid(&pXfer->aToken[2], 1, isPriv);
+    srcid = nid_from_uuid(&pXfer->aToken[2], 1, isPriv);
     if( content_get(srcid, &src)==0 ){
       rid = content_put_ex(&content, blob_str(pUuid), srcid,
                            0, isPriv);
@@ -595,69 +595,6 @@ static void send_all(Xfer *pXfer){
 }
 
 /*
-** Return the common TH1 code to evaluate prior to evaluating any other
-** TH1 transfer notification scripts.
-*/
-const char *xfer_common_code(void){
-  return db_get("xfer-common-script", 0);
-}
-
-/*
-** Return the TH1 code to evaluate when a push is processed.
-*/
-const char *xfer_push_code(void){
-  return db_get("xfer-push-script", 0);
-}
-
-/*
-** Return the TH1 code to evaluate when a commit is processed.
-*/
-const char *xfer_commit_code(void){
-  return db_get("xfer-commit-script", 0);
-}
-
-/*
-** Return the TH1 code to evaluate when a ticket change is processed.
-*/
-const char *xfer_ticket_code(void){
-  return db_get("xfer-ticket-script", 0);
-}
-
-/*
-** Run the specified TH1 script, if any, and returns 1 on error.
-*/
-int xfer_run_script(
-  const char *zScript,
-  const char *zUuidOrList,
-  int bIsList
-){
-  int rc = TH_OK;
-  if( !zScript ) return rc;
-  Th_FossilInit(TH_INIT_DEFAULT);
-  Th_Store(bIsList ? "uuids" : "uuid", zUuidOrList ? zUuidOrList : "");
-  rc = Th_Eval(g.interp, 0, zScript, -1);
-  if( rc!=TH_OK ){
-    fossil_error(1, "%s", Th_GetResult(g.interp, 0));
-  }
-  return rc;
-}
-
-/*
-** Runs the pre-transfer TH1 script, if any, and returns its return code.
-** This script may be run multiple times.  If the script performs actions
-** that cannot be redone, it should use an internal [if] guard similar to
-** the following:
-**
-** if {![info exists common_done]} {
-**   # ... code here
-**   set common_done 1
-** }
-*/
-int xfer_run_common_script(void){
-  return xfer_run_script(xfer_common_code(), 0, 0);
-}
-
-/*
 ** This routine makes a "syncwith:URL" entry in the CONFIG table to
 ** indicate that a sync is occuring with zUrl.
 **
@@ -710,10 +647,6 @@ void page_xfer(void){
   char *zNow;
   int rc;
   const char *zScript = 0;
-  char *zUuidList = 0;
-  int nUuidList = 0;
-  char **pzUuidList = 0;
-  int *pnUuidList = 0;
   int uvCatalogSent = 0;
   int bSendLinks = 0;
 
@@ -743,21 +676,10 @@ void page_xfer(void){
 
   db_begin_write();
   db_multi_exec(
-     "CREATE TEMP TABLE onremote(rid INTEGER PRIMARY KEY);"
-     "CREATE TEMP TABLE unk(uuid TEXT PRIMARY KEY) WITHOUT ROWID;"
+     "CREATE TEMP TABLE peerhave(uuid TEXT PRIMARY KEY) WITHOUT ROWID;"
+     "CREATE TEMP TABLE peerneed(uuid TEXT PRIMARY KEY) WITHOUT ROWID;"
   );
   manifest_crosslink_begin();
-  rc = xfer_run_common_script();
-  if( rc==TH_ERROR ){
-    cgi_reset_content();
-    @ error common\sscript\sfailed:\s%F(g.zErrMsg)
-    nErr++;
-  }
-  zScript = xfer_push_code();
-  if( zScript ){ /* NOTE: Are TH1 transfer hooks enabled? */
-    pzUuidList = &zUuidList;
-    pnUuidList = &nUuidList;
-  }
   while( blob_line(xfer.pIn, &xfer.line) ){
     if( blob_buffer(&xfer.line)[0]=='#' ) continue;
     if( blob_size(&xfer.line)==0 ) continue;
@@ -775,7 +697,7 @@ void page_xfer(void){
         nErr++;
         break;
       }
-      xfer_accept_file(&xfer, 0, pzUuidList, pnUuidList);
+      xfer_accept_file(&xfer, 0);
       if( blob_size(&xfer.err) ){
         cgi_reset_content();
         @ error %T(blob_str(&xfer.err))
@@ -796,7 +718,7 @@ void page_xfer(void){
         nErr++;
         break;
       }
-      xfer_accept_compressed_file(&xfer, pzUuidList, pnUuidList);
+      xfer_accept_compressed_file(&xfer);
       if( blob_size(&xfer.err) ){
         cgi_reset_content();
         @ error %T(blob_str(&xfer.err))
@@ -831,7 +753,7 @@ void page_xfer(void){
       nIneed++;
       remote_unk(&xfer.aToken[1]);
       if( isPull ){
-        int rid = rid_from_uuid(&xfer.aToken[1], 0, 0);
+        int rid = nid_from_uuid(&xfer.aToken[1], 0, 0);
         if( rid ){
           send_file(&xfer, rid, &xfer.aToken[1], deltaFlag);
         }
@@ -848,7 +770,7 @@ void page_xfer(void){
     ){
       if( isPush ){
         int rid = 0;
-        rid = rid_from_uuid(&xfer.aToken[1], 1, 0);
+        rid = nid_from_uuid(&xfer.aToken[1], 1, 0);
         if( rid ){
           peer_have(rid);
         }
@@ -1240,18 +1162,7 @@ void page_xfer(void){
     blob_reset(&xfer.line);
   }
   if( isPush ){
-    if( rc==TH_OK ){
-      rc = xfer_run_script(zScript, zUuidList, 1);
-      if( rc==TH_ERROR ){
-        cgi_reset_content();
-        @ error push\sscript\sfailed:\s%F(g.zErrMsg)
-        nErr++;
-      }
-    }
     request_partials(&xfer, 500);
-  }
-  if( zUuidList ){
-    Th_Free(g.interp, zUuidList);
   }
   if( isClone && nIneed==0 ){
     /* The initial "clone" message from client to server contains no
@@ -1269,7 +1180,7 @@ void page_xfer(void){
     if( xfer.syncPrivate ) send_private(&xfer);
   }
   hook_expecting_more_artifacts(xfer.nGimmeSent?60:0);
-  db_multi_exec("DROP TABLE onremote; DROP TABLE unk;");
+  db_multi_exec("DROP TABLE peerhave; DROP TABLE peerneed;");
   manifest_crosslink_end(MC_PERMIT_HOOKS);
 
   /* Send URLs for alternative repositories for the same project,
@@ -1605,8 +1516,8 @@ int client_sync(
     db_begin_transaction();
     db_record_repository_filename(0);
     db_multi_exec(
-      "CREATE TEMP TABLE onremote(rid INTEGER PRIMARY KEY);"
-      "CREATE TEMP TABLE unk(uuid TEXT PRIMARY KEY) WITHOUT ROWID;"
+      "CREATE TEMP TABLE peerhave(uuid TEXT PRIMARY KEY) WITHOUT ROWID;"
+      "CREATE TEMP TABLE peerneed(uuid TEXT PRIMARY KEY) WITHOUT ROWID;"
     );
     manifest_crosslink_begin();
 
@@ -1891,7 +1802,7 @@ int client_sync(
       ){
         remote_unk(&xfer.aToken[1]);
         if( syncFlags & SYNC_PUSH ){
-          int rid = rid_from_uuid(&xfer.aToken[1], 0, 0);
+          int rid = nid_from_uuid(&xfer.aToken[1], 0, 0);
           if( rid ) send_file(&xfer, rid, &xfer.aToken[1], 0);
         }
       }else
@@ -1914,7 +1825,7 @@ int client_sync(
       ){
         int rid;
         int isPriv = xfer.nToken>=3 && blob_eq(&xfer.aToken[2],"1");
-        rid = rid_from_uuid(&xfer.aToken[1], 0, 0);
+        rid = nid_from_uuid(&xfer.aToken[1], 0, 0);
         if( rid>0 ){
           if( isPriv ){
             content_make_private(rid);
@@ -2313,7 +2224,7 @@ int client_sync(
     xfer.nFileRcvd = 0;
     xfer.nDeltaRcvd = 0;
     xfer.nDanglingFile = 0;
-    db_multi_exec("DROP TABLE onremote; DROP TABLE unk;");
+    db_multi_exec("DROP TABLE peerhave; DROP TABLE peerneed;");
     if( go ){
       manifest_crosslink_end(MC_PERMIT_HOOKS);
     }else{
@@ -2359,7 +2270,7 @@ int client_sync(
   transport_close(&g.url);
   transport_global_shutdown(&g.url);
   if( nErr && go==2 ){
-    db_multi_exec("DROP TABLE onremote; DROP TABLE unk;");
+    db_multi_exec("DROP TABLE peerhave; DROP TABLE peerneed;");
     manifest_crosslink_end(MC_PERMIT_HOOKS);
     content_enable_dephantomize(1);
     db_end_transaction(0);
