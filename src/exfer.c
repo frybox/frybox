@@ -41,14 +41,14 @@ struct Xfer {
   Blob aToken[6];     /* Tokenized version of line */
   Blob err;           /* Error message text */
   int nToken;         /* Number of tokens in line */
-  int nIHaveSent;     /* Number of "ihave" cards sent */
+  int nIHaveSent;     /* Number of "have" cards sent */
   int nINeedSent;     /* Number of ineed cards sent */
   int nAtomSent;      /* Number of atom nodes sent */
   int nListSent;      /* Number of list nodes sent */
   int nAtomRcvd;      /* Number of atom nodes received */
   int nListRcvd;      /* Number of list nodes received */
   int mxSend;         /* Stop sending "file" when pOut reaches this size */
-  int resync;         /* Send ihave cards for all holdings */
+  int resync;         /* Send have cards for all holdings */
   u32 peerVersion;    /* Version of fossil running on the other side */
   u32 peerDate;       /* Date for specific client software edition */
   u32 peerTime;       /* Time of date correspoding on peerDate */   
@@ -237,9 +237,9 @@ static void send_node(Xfer *pXfer, int rid, Blob *pUuid, int nativeDelta){
       /* If the artifact is private and we are not doing a private sync,
       ** at least tell the other side that the artifact exists and is
       ** known to be private.  But only do this for newer clients since
-      ** older ones will throw an error if they get a private ihave card
+      ** older ones will throw an error if they get a private have card
       ** and private syncing is disallowed */
-      blob_appendf(pXfer->pOut, "ihave %b 1\n", pUuid);
+      blob_appendf(pXfer->pOut, "have %b 1\n", pUuid);
       pXfer->nIGotSent++;
       pXfer->nPrivIGot++;
     }
@@ -271,7 +271,7 @@ static void send_node(Xfer *pXfer, int rid, Blob *pUuid, int nativeDelta){
   }
   if( (pXfer->maxTime != -1 && time(NULL) >= pXfer->maxTime) ||
        pXfer->mxSend<=(int)blob_size(pXfer->pOut) ){
-    const char *zFormat = isPriv ? "ihave %b 1\n" : "ihave %b\n";
+    const char *zFormat = isPriv ? "have %b 1\n" : "have %b\n";
     blob_appendf(pXfer->pOut, zFormat /*works-like:"%b"*/, pUuid);
     pXfer->nIGotSent++;
     blob_reset(&uuid);
@@ -569,7 +569,7 @@ static int send_root(Xfer *pXfer){
     );
   }
   while( db_step(&q)==SQLITE_ROW ){
-    blob_appendf(pXfer->pOut, "ihave %s\n", db_column_text(&q, 0));
+    blob_appendf(pXfer->pOut, "have %s\n", db_column_text(&q, 0));
     cnt++;
     if( pXfer->resync && pXfer->mxSend<(int)blob_size(pXfer->pOut) ){
       pXfer->resync = db_column_int(&q, 1)-1;
@@ -581,7 +581,7 @@ static int send_root(Xfer *pXfer){
 }
 
 /*
-** Send an ihave message for every artifact.
+** Send an have message for every artifact.
 */
 static void send_all(Xfer *pXfer){
   Stmt q;
@@ -589,7 +589,7 @@ static void send_all(Xfer *pXfer){
     "SELECT uuid FROM node"
   );
   while( db_step(&q)==SQLITE_ROW ){
-    blob_appendf(pXfer->pOut, "ihave %s\n", db_column_text(&q, 0));
+    blob_appendf(pXfer->pOut, "have %s\n", db_column_text(&q, 0));
   }
   db_finalize(&q);
 }
@@ -642,7 +642,7 @@ void page_xfer(void){
   Xfer xfer;
   int deltaFlag = 0;
   int isClone = 0;
-  int nIneed = 0;
+  int nNeed = 0;
   int size;
   char *zNow;
   int rc;
@@ -685,12 +685,11 @@ void page_xfer(void){
     if( blob_size(&xfer.line)==0 ) continue;
     xfer.nToken = blob_tokenize(&xfer.line, xfer.aToken, count(xfer.aToken));
 
-    /*   file HASH SIZE \n CONTENT
-    **   file HASH DELTASRC SIZE \n CONTENT
+    /*   atom HASH SIZE \n CONTENT
     **
-    ** Server accepts a file from the client.
+    ** Server accepts a atom node from the client.
     */
-    if( blob_eq(&xfer.aToken[0], "file") ){
+    if( blob_eq(&xfer.aToken[0], "atom") ){
       if( !isPush ){
         cgi_reset_content();
         @ error not\sauthorized\sto\swrite
@@ -706,12 +705,11 @@ void page_xfer(void){
       }
     }else
 
-    /*   cfile HASH USIZE CSIZE \n CONTENT
-    **   cfile HASH DELTASRC USIZE CSIZE \n CONTENT
+    /*   list HASH CSIZE \n CONTENT
     **
-    ** Server accepts a compressed file from the client.
+    ** Server accepts a list node from the client.
     */
-    if( blob_eq(&xfer.aToken[0], "cfile") ){
+    if( blob_eq(&xfer.aToken[0], "list") ){
       if( !isPush ){
         cgi_reset_content();
         @ error not\sauthorized\sto\swrite
@@ -727,26 +725,11 @@ void page_xfer(void){
       }
     }else
 
-    /*   uvfile NAME MTIME HASH SIZE FLAGS \n CONTENT
-    **
-    ** Server accepts an unversioned file from the client.
-    */
-    if( blob_eq(&xfer.aToken[0], "uvfile") ){
-      xfer_accept_unversioned_file(&xfer, g.perm.WrUnver);
-      if( blob_size(&xfer.err) ){
-        cgi_reset_content();
-        @ error %T(blob_str(&xfer.err))
-        fossil_print("%%%%%%%% xfer.err: '%s'\n", blob_str(&xfer.err));
-        nErr++;
-        break;
-      }
-    }else
-
-    /*   ineed HASH
+    /*   need HASH
     **
     ** Client is requesting a file from the server.  Send it.
     */
-    if( blob_eq(&xfer.aToken[0], "ineed")
+    if( blob_eq(&xfer.aToken[0], "need")
      && xfer.nToken==2
      && blob_is_hname(&xfer.aToken[1])
     ){
@@ -760,12 +743,12 @@ void page_xfer(void){
       }
     }else
 
-    /*   ihave HASH
+    /*   have HASH
     **
     ** Client announces that it has a particular file.
     */
     if( xfer.nToken==2
-     && blob_eq(&xfer.aToken[0], "ihave")
+     && blob_eq(&xfer.aToken[0], "have")
      && blob_is_hname(&xfer.aToken[1])
     ){
       if( isPush ){
@@ -892,264 +875,6 @@ void page_xfer(void){
           break;
         }
       }
-    }else
-
-    /*    reqconfig  NAME
-    **
-    ** Client is requesting a configuration value from the server
-    */
-    if( blob_eq(&xfer.aToken[0], "reqconfig")
-     && xfer.nToken==2
-    ){
-      if( g.perm.Read ){
-        char *zName = blob_str(&xfer.aToken[1]);
-        if( zName[0]=='/' ){
-          /* New style configuration transfer */
-          int groupMask = configure_name_to_mask(&zName[1], 0);
-          if( !g.perm.Admin ) groupMask &= ~(CONFIGSET_USER|CONFIGSET_SCRIBER);
-          if( !g.perm.RdAddr ) groupMask &= ~CONFIGSET_ADDR;
-          configure_send_group(xfer.pOut, groupMask, 0);
-        }
-      }
-    }else
-
-    /*   config NAME SIZE \n CONTENT
-    **
-    ** Client has sent a configuration value to the server.
-    ** This is only permitted for high-privilege users.
-    */
-    if( blob_eq(&xfer.aToken[0],"config") && xfer.nToken==3
-        && blob_is_int(&xfer.aToken[2], &size) ){
-      const char *zName = blob_str(&xfer.aToken[1]);
-      Blob content;
-      blob_zero(&content);
-      blob_extract(xfer.pIn, size, &content);
-      if( !g.perm.Admin ){
-        cgi_reset_content();
-        @ error not\sauthorized\sto\spush\sconfiguration
-        nErr++;
-        break;
-      }
-      configure_receive(zName, &content, CONFIGSET_ALL);
-      blob_reset(&content);
-      blob_seek(xfer.pIn, 1, BLOB_SEEK_CUR);
-    }else
-
-
-    /*    cookie TEXT
-    **
-    ** A cookie contains an arbitrary-length argument that is server-defined.
-    ** The argument must be encoded so as not to contain any whitespace.
-    ** The server can optionally send a cookie to the client.  The client
-    ** might then return the same cookie back to the server on its next
-    ** communication.  The cookie might record information that helps
-    ** the server optimize a push or pull.
-    **
-    ** The client is not required to return a cookie.  So the server
-    ** must not depend on the cookie.  The cookie should be an optimization
-    ** only.  The client might also send a cookie that came from a different
-    ** server.  So the server must be prepared to distinguish its own cookie
-    ** from cookies originating from other servers.  The client might send
-    ** back several different cookies to the server.  The server should be
-    ** prepared to sift through the cookies and pick the one that it wants.
-    */
-    if( blob_eq(&xfer.aToken[0], "cookie") && xfer.nToken==2 ){
-      /* Process the cookie */
-    }else
-
-
-    /*    private
-    **
-    ** The client card indicates that the next "file" or "cfile" will contain
-    ** private content.
-    */
-    if( blob_eq(&xfer.aToken[0], "private") ){
-      if( !g.perm.Private ){
-        server_private_xfer_not_authorized();
-      }else{
-        xfer.nextIsPrivate = 1;
-      }
-    }else
-
-
-    /*    pragma NAME VALUE...
-    **
-    ** The client issues pragmas to try to influence the behavior of the
-    ** server.  These are requests only.  Unknown pragmas are silently
-    ** ignored.
-    */
-    if( blob_eq(&xfer.aToken[0], "pragma") && xfer.nToken>=2 ){
-
-      /*   pragma send-private
-      **
-      ** The client is requesting private artifacts.
-      **
-      ** If the user has the "x" privilege (which must be set explicitly -
-      ** it is not automatic with "a" or "s") then this pragma causes
-      ** private information to be pulled in addition to public records.
-      */
-      if( blob_eq(&xfer.aToken[1], "send-private") ){
-        login_check_credentials();
-        if( !g.perm.Private ){
-          server_private_xfer_not_authorized();
-        }else{
-          xfer.syncPrivate = 1;
-        }
-      }else
-
-      /*   pragma send-catalog
-      **
-      ** The client wants to see igot cards for all known artifacts.
-      ** This is used as part of "sync --verily" to help ensure that
-      ** no artifacts have been missed on prior syncs.
-      */
-      if( blob_eq(&xfer.aToken[1], "send-catalog") ){
-        xfer.resync = 0x7fffffff;
-      }else
-
-      /*   pragma client-version VERSION ?DATE? ?TIME?
-      **
-      ** The client announces to the server what version of Fossil it
-      ** is running.  The DATE and TIME are a pure numeric ISO8601 time
-      ** for the specific check-in of the client.
-      */
-      if( xfer.nToken>=3 && blob_eq(&xfer.aToken[1], "client-version") ){
-        xfer.remoteVersion = atoi(blob_str(&xfer.aToken[2]));
-        if( xfer.nToken>=5 ){
-          xfer.remoteDate = atoi(blob_str(&xfer.aToken[3]));
-          xfer.remoteTime = atoi(blob_str(&xfer.aToken[4]));
-          @ pragma server-version %d(RELEASE_VERSION_NUMBER) \
-          @ %d(MANIFEST_NUMERIC_DATE) %d(MANIFEST_NUMERIC_TIME)
-        }
-      }else
-
-      /*   pragma uv-hash HASH
-      **
-      ** The client wants to make sure that unversioned files are all synced.
-      ** If the HASH does not match, send a complete catalog of
-      ** "uvigot" cards.
-      */
-      if( blob_eq(&xfer.aToken[1], "uv-hash")
-       && blob_is_hname(&xfer.aToken[2])
-      ){
-        if( !uvCatalogSent
-         && g.perm.Read
-         && !blob_eq_str(&xfer.aToken[2], unversioned_content_hash(0),-1)
-        ){
-          if( g.perm.WrUnver ){
-            @ pragma uv-push-ok
-          }else if( g.perm.Read ){
-            @ pragma uv-pull-only
-          }
-          send_unversioned_catalog(&xfer);
-        }
-        uvCatalogSent = 1;
-      }else
-
-      /*   pragma ci-lock CHECKIN-HASH CLIENT-ID
-      **
-      ** The client wants to make non-branch commit against the check-in
-      ** identified by CHECKIN-HASH.  The server will remember this and
-      ** subsequent ci-lock requests from different clients will generate
-      ** a ci-lock-fail pragma in the reply.
-      */
-      if( blob_eq(&xfer.aToken[1], "ci-lock")
-       && xfer.nToken==4
-       && blob_is_hname(&xfer.aToken[2])
-      ){
-        Stmt q;
-        sqlite3_int64 iNow = time(0);
-        sqlite3_int64 maxAge = db_get_int("lock-timeout",60);
-        int seenFault = 0;
-        db_prepare(&q,
-          "SELECT value->>'login',"
-          "       mtime,"
-          "       value->>'clientid',"
-          "       (SELECT rid FROM blob WHERE uuid=substr(name,9)),"
-          "       name"
-          " FROM config"
-          " WHERE name GLOB 'ci-lock-*'"
-          "   AND json_valid(value)"
-        );
-        while( db_step(&q)==SQLITE_ROW ){
-          int x = db_column_int(&q,3);
-          const char *zName = db_column_text(&q,4);
-          if( db_column_int64(&q,1)<=iNow-maxAge || !is_a_leaf(x) ){
-            /* check-in locks expire after maxAge seconds, or when the
-            ** check-in is no longer a leaf */
-            db_unprotect(PROTECT_CONFIG);
-            db_multi_exec("DELETE FROM config WHERE name=%Q", zName);
-            db_protect_pop();
-            continue;
-          }
-          if( fossil_strcmp(zName+8, blob_str(&xfer.aToken[2]))==0 ){
-            const char *zClientId = db_column_text(&q, 2);
-            const char *zLogin = db_column_text(&q,0);
-            sqlite3_int64 mtime = db_column_int64(&q, 1);
-            if( fossil_strcmp(zClientId, blob_str(&xfer.aToken[3]))!=0 ){
-              @ pragma ci-lock-fail %F(zLogin) %lld(mtime)
-            }
-            seenFault = 1;
-          }
-        }
-        db_finalize(&q);
-        if( !seenFault ){
-          db_unprotect(PROTECT_CONFIG);
-          db_multi_exec(
-            "REPLACE INTO config(name,value,mtime)"
-            "VALUES('ci-lock-%q',json_object('login',%Q,'clientid',%Q),now())",
-            blob_str(&xfer.aToken[2]), g.zLogin,
-            blob_str(&xfer.aToken[3])
-          );
-          db_protect_pop();
-        }
-        if( db_get_boolean("forbid-delta-manifests",0) ){
-          @ pragma avoid-delta-manifests
-        }
-      }else
-
-      /*   pragma ci-unlock CLIENT-ID
-      **
-      ** Remove any locks previously held by CLIENT-ID.  Clients send this
-      ** pragma with their own ID whenever they know that they no longer
-      ** have any commits pending.
-      */
-      if( blob_eq(&xfer.aToken[1], "ci-unlock")
-       && xfer.nToken==3
-       && blob_is_hname(&xfer.aToken[2])
-      ){
-        db_unprotect(PROTECT_CONFIG);
-        db_multi_exec(
-          "DELETE FROM config"
-          " WHERE name GLOB 'ci-lock-*'"
-          "   AND (NOT json_valid(value) OR value->>'clientid'==%Q)",
-          blob_str(&xfer.aToken[2])
-        );
-        db_protect_pop();
-      }else
-
-      /*   pragma client-url URL
-      **
-      ** This pragma is an informational notification to the server that
-      ** their relationship could, in theory, be inverted by having the
-      ** server call the client at URL.
-      */
-      if( blob_eq(&xfer.aToken[1], "client-url")
-       && xfer.nToken==3
-       && g.perm.Write
-      ){
-        xfer_syncwith(blob_str(&xfer.aToken[2]), 1);
-      }else
-
-      /*    pragma req-links
-      **
-      ** The client sends this message to the server to ask the server
-      ** to tell it about alternative repositories  in the reply.
-      */
-      if( blob_eq(&xfer.aToken[1], "req-links") ){
-        bSendLinks = 1;
-      }
-
     }else
 
     /* Unknown message
