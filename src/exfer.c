@@ -41,8 +41,8 @@ struct Xfer {
   Blob aToken[6];     /* Tokenized version of line */
   Blob err;           /* Error message text */
   int nToken;         /* Number of tokens in line */
-  int nIHaveSent;     /* Number of "have" cards sent */
-  int nINeedSent;     /* Number of ineed cards sent */
+  int nHaveSent;      /* Number of "have" cards sent */
+  int nNeedSent;      /* Number of ineed cards sent */
   int nAtomSent;      /* Number of atom nodes sent */
   int nListSent;      /* Number of list nodes sent */
   int nAtomRcvd;      /* Number of atom nodes received */
@@ -109,61 +109,69 @@ static void peer_need(Blob *pHash){
 }
 
 /*
-** The aToken[0..nToken-1] blob array is a parse of a "file" line
+** The aToken[0..nToken-1] blob array is a parse of a "atom" line
 ** message.  This routine finishes parsing that message and does
-** a record insert of the file.
+** a record insert of the atom node if it is not partial.
 **
-** The file line is in one of the following two forms:
+** The atom line is in the following form:
 **
-**      file HASH SIZE \n CONTENT
-**      file HASH DELTASRC SIZE \n CONTENT
+**      atom HASH SIZE BOFFSET EOFFSET\n CONTENT
 **
-** The content is SIZE bytes immediately following the newline.
-** If DELTASRC exists, then the CONTENT is a delta against the
-** content of DELTASRC.
+** The CONTENT is (EOFFSET-BOFFSET) bytes immediately following
+** the newline.
+**
+** SIZE is the total size of the atom node.  BOFFSET is the begin
+** offset of the CONTENT within the atom node.  EOFFSET is the
+** end offset of the CONTENT within the atom node.
+**
+** When the atom node is in the same message, BOFFSET is always zero,
+** and EOFFSET is the same as SIZE.
 **
 ** If any error occurs, write a message into pErr which has already
 ** be initialized to an empty string.
-**
-** Any artifact successfully received by this routine is considered to
-** be public and is therefore removed from the "private" table.
 */
-static void xfer_accept_node(
+static void xfer_accept_atom_node(
   Xfer *pXfer,
   int cloneFlag
 ){
-  int n;
+  int size;
+  int boffset;
+  int eoffset;
   int rid;
   int srcid = 0;
   Blob content;
   int isPriv;
   Blob *pUuid;
 
-  isPriv = pXfer->nextIsPrivate;
-  pXfer->nextIsPrivate = 0;
-  if( pXfer->nToken<3
-   || pXfer->nToken>4
+  if( pXfer->nToken != 5
    || !blob_is_hname(&pXfer->aToken[1])
-   || !blob_is_int(&pXfer->aToken[pXfer->nToken-1], &n)
-   || n<0
-   || (pXfer->nToken==4 && !blob_is_hname(&pXfer->aToken[2]))
+   || !blob_is_int(&pXfer->aToken[2], &size)
+   || !blob_is_int(&pXfer->aToken[3], &boffset)
+   || !blob_is_int(&pXfer->aToken[4], &eoffset)
+   || size < 0
+   || boffset < 0
+   || eoffset < 0
+   || eoffset > size
   ){
-    blob_appendf(&pXfer->err, "malformed file line");
+    blob_appendf(&pXfer->err, "malformed atom line");
     return;
   }
   blob_zero(&content);
-  blob_extract(pXfer->pIn, n, &content);
+  blob_extract(pXfer->pIn, (eoffset-boffset), &content);
   pUuid = &pXfer->aToken[1];
-  if( !cloneFlag && uuid_is_shunned(blob_str(pUuid)) ){
-    /* Ignore files that have been shunned */
-    blob_reset(&content);
-    return;
+  if( boffset==0 && eoffset==size ){
+    // This is a complete atom node, write to nodes directly.
+    if( hname_verify_hash(&content, blob_buffer(pUuid), blob_size(pUuid))==0 ){
+      blob_appendf(&pXfer->err, "wrong hash on received atom: %b", pUuid);
+    }
+  }else{
+    // TODO 找到如何发现partial文件路径的方法
   }
-  if( isPriv && !g.perm.Private ){
-    /* Do not accept private files if not authorized */
-    blob_reset(&content);
-    return;
-  }
+
+
+
+
+
   if( cloneFlag ){
     if( pXfer->nToken==4 ){
       srcid = nid_from_uuid(&pXfer->aToken[2], 1, isPriv);
@@ -581,7 +589,7 @@ static int send_root(Xfer *pXfer){
 }
 
 /*
-** Send an have message for every artifact.
+** Send an have message for every node.
 */
 static void send_all(Xfer *pXfer){
   Stmt q;
@@ -696,7 +704,7 @@ void page_xfer(void){
         nErr++;
         break;
       }
-      xfer_accept_file(&xfer, 0);
+      xfer_accept_atom_node(&xfer, 0);
       if( blob_size(&xfer.err) ){
         cgi_reset_content();
         @ error %T(blob_str(&xfer.err))
@@ -716,7 +724,7 @@ void page_xfer(void){
         nErr++;
         break;
       }
-      xfer_accept_compressed_file(&xfer);
+      xfer_accept_list_node(&xfer);
       if( blob_size(&xfer.err) ){
         cgi_reset_content();
         @ error %T(blob_str(&xfer.err))

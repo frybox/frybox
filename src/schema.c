@@ -66,10 +66,12 @@ const char zConfigSchema[] =
 */
 const char zRepositorySchema1[] =
 @ -- The NODE table contains all nodes in the NODES file.
+@ -- Grow-only set
 @ CREATE TABLE node(
 @   nid INTEGER PRIMARY KEY,        -- Node ID
 @   size INTEGER,                   -- Size of node, including node line.
-@   offset INTEGER,                 -- Offset in the nodes file
+@   boffset INTEGER,                -- Begin offset in the nodes file
+@   eoffset INTEGER,                -- End offset，one pass the last byte
 @   type TEXT,                      -- Type of node: list, atom
 @   uuid TEXT UNIQUE NOT NULL,      -- Hash of the node
 @   CHECK( length(uuid)>=40 AND nid>0 )
@@ -84,7 +86,7 @@ const char zRepositorySchema1[] =
 @ CREATE TABLE partial(
 @   uuid TEXT UNIQUE NOT NULL,      -- Hash of the node
 @   size INTEGER,                   -- Current size of current content.
-@   total INTEGER                   -- Total size of this transaction.
+@   total INTEGER                   -- Total size of this node.
 @ );
 @
 @ -- The BLOB and DELTA tables contain all records held in the repository.
