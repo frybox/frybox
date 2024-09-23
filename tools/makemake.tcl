@@ -1556,7 +1556,7 @@ INSTALLDIR = $(DESTDIR)\$(INSTALLDIR)
 #
 # NOTE: Make sure B path has no trailing backslash, UNIX-style path is OK too.
 #
-!if !exist("$(B)\.fossil-settings")
+!if !exist("$(B)\manifest")
 !error Please specify path to project base directory: B="path/to/fossil"
 !endif
 
