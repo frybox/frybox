@@ -2521,7 +2521,7 @@ static int isValidLocalDb(const char *zDbName){
 ** is found, it is attached to the open database connection too.
 */
 int db_open_local_v2(int bRootOnly){
-  int i, n;
+  int n;
   char zPwd[2000];
   char *zDbName;
 
