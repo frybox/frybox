@@ -2274,14 +2274,14 @@ static char *db_configdb_name(int isOptional){
 
   /* On Windows, look for these directories, in order:
   **
-  **    FOSSIL_HOME
+  **    FRYBOX_HOME
   **    LOCALAPPDATA
   **    APPDATA
   **    USERPROFILE
   **    HOMEDRIVE HOMEPATH
   */
 #if defined(_WIN32) || defined(__CYGWIN__)
-  zHome = fossil_getenv("FOSSIL_HOME");
+  zHome = fossil_getenv("FRYBOX_HOME");
   if( zHome==0 ){
     zHome = fossil_getenv("LOCALAPPDATA");
     if( zHome==0 ){
@@ -2296,7 +2296,7 @@ static char *db_configdb_name(int isOptional){
       }
     }
   }
-  zDbName = mprintf("%//_fossil", zHome);
+  zDbName = mprintf("%//_frybox", zHome);
   fossil_free(zHome);
   return zDbName;
 
@@ -2306,27 +2306,27 @@ static char *db_configdb_name(int isOptional){
   /* For unix. a 5-step algorithm is used.
   ** See ../www/tech_overview.wiki for discussion.
   **
-  ** Step 1:  If FOSSIL_HOME exists -> $FOSSIL_HOME/.fossil
+  ** Step 1:  If FRYBOX_HOME exists -> $FRYBOX_HOME/.frybox
   */
-  zHome = fossil_getenv("FOSSIL_HOME");
-  if( zHome!=0 ) return mprintf("%s/.fossil", zHome);
+  zHome = fossil_getenv("FRYBOX_HOME");
+  if( zHome!=0 ) return mprintf("%s/.frybox", zHome);
 
-  /* Step 2:  If HOME exists and file $HOME/.fossil exists -> $HOME/.fossil
+  /* Step 2:  If HOME exists and file $HOME/.frybox exists -> $HOME/.frybox
   */
   zHome = fossil_getenv("HOME");
   if( zHome ){
-    zDbName = mprintf("%s/.fossil", zHome);
+    zDbName = mprintf("%s/.frybox", zHome);
     if( file_size(zDbName, ExtFILE)>1024*3 ){
       return zDbName;
     }
     fossil_free(zDbName);
   }
 
-  /* Step 3: if XDG_CONFIG_HOME exists -> $XDG_CONFIG_HOME/fossil.db
+  /* Step 3: if XDG_CONFIG_HOME exists -> $XDG_CONFIG_HOME/frybox.db
   */
   zXdgHome = fossil_getenv("XDG_CONFIG_HOME");
   if( zXdgHome!=0 ){
-    return mprintf("%s/fossil.db", zXdgHome);
+    return mprintf("%s/frybox.db", zXdgHome);
   }
 
   /* The HOME variable is required in order to continue.
@@ -2334,7 +2334,7 @@ static char *db_configdb_name(int isOptional){
   if( zHome==0 ){
     if( isOptional ) return 0;
     fossil_fatal("cannot locate home directory - please set one of the "
-                 "FOSSIL_HOME, XDG_CONFIG_HOME, or HOME environment "
+                 "FRYBOX_HOME, XDG_CONFIG_HOME, or HOME environment "
                  "variables");
   }
 
@@ -2343,12 +2343,12 @@ static char *db_configdb_name(int isOptional){
   zXdgHome = mprintf("%s/.config", zHome);
   if( file_isdir(zXdgHome, ExtFILE)==1 ){
     fossil_free(zXdgHome);
-    return mprintf("%s/.config/fossil.db", zHome);
+    return mprintf("%s/.config/frybox.db", zHome);
   }
 
   /* Step 5: Otherwise -> $HOME/.fossil
   */
-  return mprintf("%s/.fossil", zHome);
+  return mprintf("%s/.frybox", zHome);
 #endif /* unix */
 }
 
@@ -2520,33 +2520,34 @@ static int isValidLocalDb(const char *zDbName){
 ** not the repository database is found.  If the _FOSSIL_ or .fslckout file
 ** is found, it is attached to the open database connection too.
 */
-int db_open_local_v2(const char *zDbName, int bRootOnly){
+int db_open_local_v2(int bRootOnly){
   int i, n;
   char zPwd[2000];
-  static const char *(aDbName[]) = { "_FOSSIL_", ".fslckout", ".fos" };
+  char *zDbName;
 
   if( g.localOpen ) return 1;
-  file_getcwd(zPwd, sizeof(zPwd)-20);
+  file_getcwd(zPwd, sizeof(zPwd)-30);
   n = strlen(zPwd);
   while( n>0 ){
-    for(i=0; i<count(aDbName); i++){
-      sqlite3_snprintf(sizeof(zPwd)-n, &zPwd[n], "/%s", aDbName[i]);
-      if( isValidLocalDb(zPwd) ){
-        if( db_open_config(0, 1)==0 ){
-          return 0; /* Configuration could not be opened */
-        }
-        /* Found a valid check-out database file */
-        g.zLocalDbName = mprintf("%s", zPwd);
-        zPwd[n] = 0;
-        while( n>0 && zPwd[n-1]=='/' ){
-          n--;
-          zPwd[n] = 0;
-        }
-        g.zLocalRoot = mprintf("%s/", zPwd);
-        g.localOpen = 1;
-        db_open_repository(zDbName);
-        return 1;
+    sqlite3_snprintf(sizeof(zPwd)-n, &zPwd[n], "/.frybox/local.db");
+    if( isValidLocalDb(zPwd) ){
+      if( db_open_config(0, 1)==0 ){
+        return 0; /* Configuration could not be opened */
       }
+      /* Found a valid check-out database file */
+      g.zLocalDbName = mprintf("%s", zPwd);
+      sqlite3_snprintf(sizeof(zPwd)-n, &zPwd[n], "/.frybox/repository.db");
+      zDbName = mprintf("%s", zPwd);
+      zPwd[n] = 0;
+      while( n>0 && zPwd[n-1]=='/' ){
+        n--;
+        zPwd[n] = 0;
+      }
+      g.zLocalRoot = mprintf("%s/", zPwd);
+      g.localOpen = 1;
+      db_open_repository(zDbName);
+      fossil_free(zDbName);
+      return 1;
     }
     if( bRootOnly ) break;
     n--;
@@ -2559,12 +2560,12 @@ int db_open_local_v2(const char *zDbName, int bRootOnly){
   return 0;
 }
 int db_open_local(const char *zDbName){
-  return db_open_local_v2(zDbName, 0);
+  return db_open_local_v2(0);
 }
 
 /*
 ** Get the full pathname to the repository database file.  The
-** local database (the _FOSSIL_ or .fslckout database) must have already
+** local database (the .frybox/local.db database) must have already
 ** been opened before this routine is called.
 */
 const char *db_repository_filename(void){
@@ -2572,15 +2573,9 @@ const char *db_repository_filename(void){
   assert( g.localOpen );
   assert( g.zLocalRoot );
   if( zRepo==0 ){
-    zRepo = db_lget("repository", 0);
-    if( zRepo && !file_is_absolute_path(zRepo) ){
-      char * zFree = zRepo;
-      zRepo = mprintf("%s%s", g.zLocalRoot, zRepo);
-      fossil_free(zFree);
-      zFree = zRepo;
-      zRepo = file_canonical_name_dup(zFree);
-      fossil_free(zFree);
-    }
+    char *zFree = mprintf("%s%s", g.zLocalRoot, ".frybox/repository.db");
+    zRepo = file_canonical_name_dup(zFree);
+    fossil_free(zFree);
   }
   return zRepo;
 }
@@ -3214,10 +3209,10 @@ void db_initial_setup(
 ** COMMAND: new#
 ** COMMAND: init
 **
-** Usage: %fossil new ?OPTIONS? FILENAME
-**    or: %fossil init ?OPTIONS? FILENAME
+** Usage: %fossil new ?OPTIONS? ?DIRECTORY?
+**    or: %fossil init ?OPTIONS? ?DIRECTORY?
 **
-** Create a repository for a new project in the file named FILENAME.
+** Create a repository for a new project in the directory named DIRECTORY.
 ** This command is distinct from "clone".  The "clone" command makes
 ** a copy of an existing project.  This command starts a new project.
 **
@@ -3253,6 +3248,8 @@ void db_initial_setup(
 ** See also: [[clone]]
 */
 void create_repository_cmd(void){
+  char zRepoDir[2000];
+  int n, rc;
   char *zPassword;
   const char *zTemplate;      /* Repository from which to copy settings */
   const char *zDate;          /* Date of the initial check-in */
@@ -3272,16 +3269,31 @@ void create_repository_cmd(void){
   /* We should be done with options.. */
   verify_all_options();
 
-  if( g.argc!=3 ){
-    usage("REPOSITORY-NAME");
+  if( g.argc == 2 ){
+    file_getcwd(zRepoDir, sizeof(zRepoDir)-30);
+    n = strlen(zRepoDir);
+    sqlite3_snprintf(sizeof(zRepoDir)-n, &zRepoDir[n], "/.frybox");
+  } else if( g.argc==3 ) {
+    sqlite3_snprintf(sizeof(zRepoDir), &zRepoDir[0], "%s/.frybox", g.argv[2]);
+  } else {
+    usage("?REPOSITORY-NAME?");
   }
-
-  if( -1 != file_size(g.argv[2], ExtFILE) ){
-    fossil_fatal("file already exists: %s", g.argv[2]);
+  if( file_isdir(zRepoDir, ExtFILE)!=1 ){
+    file_mkfolder(zRepoDir, ExtFILE, 0, 0);
+    if( file_mkdir(zRepoDir, ExtFILE, 0) ){
+      fossil_fatal("cannot create directory %s", zRepoDir);
+    }
   }
+  if( file_chdir(zRepoDir, 0) ){
+    fossil_fatal("cannot change directory to %s", zRepoDir);
+  }
+  n = strlen(zRepoDir);
+  sqlite3_snprintf(sizeof(zRepoDir)-n, &zRepoDir[n], "/repository.db");
 
-  db_create_repository(g.argv[2]);
-  db_open_repository(g.argv[2]);
+# define REPODB_NAME "./repository.db"
+  db_create_repository(REPODB_NAME);
+  db_open_repository(REPODB_NAME);
+# undef REPODB_NAME
   db_open_config(0, 0);
   if( zTemplate ) db_attach(zTemplate, "settingSrc");
   db_begin_transaction();
@@ -3303,6 +3315,19 @@ void create_repository_cmd(void){
   fossil_print("admin-user: %s (initial password is \"%s\")\n",
                g.zLogin, zPassword);
   hash_user_password(g.zLogin);
+
+# define LOCALDB_NAME "./local.db"
+  db_init_database(LOCALDB_NAME, zLocalSchema, zLocalSchemaVmerge,
+#ifdef FOSSIL_LOCAL_WAL
+                   "COMMIT; PRAGMA journal_mode=WAL; BEGIN;",
+#endif
+                   (char*)0);
+  db_delete_on_failure(LOCALDB_NAME);
+# undef LOCALDB_NAME
+  db_open_local(0);
+  db_lset("repository", zRepoDir);
+  db_record_repository_filename(zRepoDir);
+  db_set_checkout(0);
 }
 
 /*
@@ -4192,7 +4217,7 @@ void cmd_open(void){
                  file_getcwd(0,0));
   }
 
-  if( db_open_local_v2(0, allowNested) ){
+  if( db_open_local_v2(allowNested) ){
     fossil_fatal("there is already an open tree at %s", g.zLocalRoot);
   }
 

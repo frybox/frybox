@@ -28,12 +28,12 @@ INSTALLDIR = $(DESTDIR)\$(INSTALLDIR)
 # When building out of source, this Makefile needs to know the path to the base
 # top-level directory for this project. Pass it on NMAKE command line via make
 # variable B:
-#   NMAKE /f "path\to\this\Makefile" B="path/to/fossil/root"
+#   NMAKE /f "path\to\this\Makefile" B="path/to/frybox/root"
 #
 # NOTE: Make sure B path has no trailing backslash, UNIX-style path is OK too.
 #
-!if !exist("$(B)\.fossil-settings")
-!error Please specify path to project base directory: B="path/to/fossil"
+!if !exist("$(B)\manifest.uuid")
+!error Please specify path to project base directory: B="path/to/frybox"
 !endif
 
 # Perl is only necessary if OpenSSL support is enabled and it is built from
@@ -776,11 +776,11 @@ OBJ   = "$(OX)\add$O" \
         "$(OX)\xfer$O" \
         "$(OX)\xfersetup$O" \
         "$(OX)\zip$O" \
-        "$(OX)\fossil.res"
+        "$(OX)\frybox.res"
 
 
 !ifndef BASEAPPNAME
-BASEAPPNAME = fossil
+BASEAPPNAME = frybox
 !endif
 
 APPNAME     = $(OX)\$(BASEAPPNAME)$(E)
@@ -828,7 +828,7 @@ openssl:
 !if $(FOSSIL_ENABLE_WINXP)!=0 && $(FOSSIL_DYNAMIC_BUILD)!=0
 #
 # NOTE: Appending custom linker flags to the OpenSSL default linker flags is
-# somewhat difficult, as summarized in this Fossil Forum post:
+# somewhat difficult, as summarized in this frybox Forum post:
 #
 #   https://fossil-scm.org/forum/forumpost/a9a2d6af28b
 #
@@ -866,9 +866,9 @@ APPTARGETS = $(APPTARGETS) openssl
 
 "$(APPNAME)" : $(APPTARGETS) "$(OBJDIR)\translate$E" "$(OBJDIR)\mkindex$E" "$(OBJDIR)\codecheck1$E" "$(OX)\headers" $(OBJ) "$(OX)\linkopts"
 	"$(OBJDIR)\codecheck1$E" $(SRC)
-	link $(LDFLAGS) /OUT:$@ /PDB:$(@D)\ $(LIBDIR) Wsetargv.obj "$(OX)\fossil.res" @"$(OX)\linkopts"
-	if exist "$(B)\win\fossil.exe.manifest" \
-		$(MTC) -nologo -manifest "$(B)\win\fossil.exe.manifest" -outputresource:$@;1
+	link $(LDFLAGS) /OUT:$@ /PDB:$(@D)\ $(LIBDIR) Wsetargv.obj "$(OX)\frybox.res" @"$(OX)\linkopts"
+	if exist "$(B)\win\frybox.exe.manifest" \
+		$(MTC) -nologo -manifest "$(B)\win\frybox.exe.manifest" -outputresource:$@;1
 
 "$(OX)\linkopts": "$(B)\win\Makefile.msc"
 	echo "$(OX)\add.obj" > $@
@@ -2133,7 +2133,7 @@ realclean: clean
 "$(OX)\zip_.c" : "$(SRCDIR)\zip.c"
 	"$(OBJDIR)\translate$E" $** > $@
 
-"$(OX)\fossil.res" : "$(B)\win\fossil.rc"
+"$(OX)\frybox.res" : "$(B)\win\frybox.rc"
 	$(RCC) /fo $@ $**
 
 "$(OX)\headers": "$(OBJDIR)\makeheaders$E" "$(OX)\page_index.h" "$(OX)\builtin_data.h" "$(OX)\VERSION.h"

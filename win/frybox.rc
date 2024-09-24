@@ -61,7 +61,7 @@ LANGUAGE LANG_ENGLISH, SUBLANG_ENGLISH_US
 
 #define IDI_FOSSIL 8001
 
-IDI_FOSSIL ICON "fossil.ico"
+IDI_FOSSIL ICON "frybox.ico"
 
 /*
  * Version
@@ -84,14 +84,14 @@ BEGIN
   BEGIN
     BLOCK "040904b0"
     BEGIN
-      VALUE "CompanyName", "Fossil Development Team\0"
-      VALUE "FileDescription", "Fossil is a simple, high-reliability, distributed software configuration management system.\0"
-      VALUE "ProductName", "Fossil\0"
-      VALUE "ProductVersion", "Fossil " RELEASE_VERSION " " MANIFEST_VERSION " " MANIFEST_DATE " UTC\0"
-      VALUE "FileVersion", "Fossil " RELEASE_VERSION " " MANIFEST_VERSION " " MANIFEST_DATE " UTC\0"
-      VALUE "InternalName", "fossil\0"
-      VALUE "LegalCopyright", "Copyright © " MANIFEST_YEAR " by D. Richard Hipp.  All rights reserved.\0"
-      VALUE "OriginalFilename", "fossil.exe\0"
+      VALUE "CompanyName", "Frybox Development Team\0"
+      VALUE "FileDescription", "Frybox is a simple, high-reliability, end-to-end encryption content management system.\0"
+      VALUE "ProductName", "Frybox\0"
+      VALUE "ProductVersion", "Frybox " RELEASE_VERSION " " MANIFEST_VERSION " " MANIFEST_DATE " UTC\0"
+      VALUE "FileVersion", "Frybox " RELEASE_VERSION " " MANIFEST_VERSION " " MANIFEST_DATE " UTC\0"
+      VALUE "InternalName", "frybox\0"
+      VALUE "LegalCopyright", "Copyright ï¿½ " MANIFEST_YEAR " by Ju Zejian.  All rights reserved.\0"
+      VALUE "OriginalFilename", "frybox.exe\0"
       VALUE "CompilerName", COMPILER_NAME "\0"
       VALUE "SQLiteVersion", "SQLite " SQLITE_VERSION " " SQLITE_SOURCE_ID "\0"
 #if defined(FOSSIL_DYNAMIC_BUILD)
@@ -191,4 +191,4 @@ END
 #define CREATEPROCESS_MANIFEST_RESOURCE_ID 1
 #endif /* CREATEPROCESS_MANIFEST_RESOURCE_ID */
 
-CREATEPROCESS_MANIFEST_RESOURCE_ID RT_MANIFEST "fossil.exe.manifest"
+CREATEPROCESS_MANIFEST_RESOURCE_ID RT_MANIFEST "frybox.exe.manifest"

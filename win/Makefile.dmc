@@ -42,7 +42,7 @@ OBJ   = $(OBJDIR)\add$O $(OBJDIR)\ajax$O $(OBJDIR)\alerts$O $(OBJDIR)\allrepo$O 
 RC=$(DMDIR)\bin\rcc
 RCFLAGS=-32 -w1 -I$(SRCDIR) /D__DMC__
 
-APPNAME = $(OBJDIR)\fossil$(E)
+APPNAME = $(OBJDIR)\frybox$(E)
 
 all: $(APPNAME)
 
@@ -51,16 +51,16 @@ $(APPNAME) : translate$E mkindex$E codecheck1$E headers  $(OBJ) $(OBJDIR)\link
 	codecheck1$E $(SRC)
 	$(DMDIR)\bin\link @link
 
-$(OBJDIR)\fossil.res:	$B\win\fossil.rc
+$(OBJDIR)\frybox.res:	$B\win\frybox.rc
 	$(RC) $(RCFLAGS) -o$@ $**
 
-$(OBJDIR)\link: $B\win\Makefile.dmc $(OBJDIR)\fossil.res
+$(OBJDIR)\link: $B\win\Makefile.dmc $(OBJDIR)\frybox.res
 	+echo add ajax alerts allrepo attach backlink backoffice bag bisect blob branch browse builtin bundle cache capabilities captcha cgi chat checkin checkout clearsign clone color comformat configure content cookies db delta deltacmd deltafunc descendants diff diffcmd dispatch doc encode etag event export extcgi file fileedit finfo foci forum fshell fusefs fuzz glob graph gzip hname hook http http_socket http_ssl http_transport import info interwiki json json_artifact json_branch json_config json_diff json_dir json_finfo json_login json_query json_report json_status json_tag json_timeline json_user json_wiki leaf loadctrl login lookslike main manifest markdown markdown_html md5 merge merge3 moderate name patch path piechart pikchrshow pivot popen pqueue printf publish purge rebuild regexp repolist report rss schema search security_audit setup setupuser sha1 sha1hard sha3 shun sitemap skins smtp sqlcmd stash stat statrep style sync tag tar terminal th_main timeline tkt tktsetup undo unicode unversioned update url user utf8 util verify vfile wiki wikiformat winfile winhttp xfer xfersetup zip shell sqlite3 th th_lang > $@
-	+echo fossil >> $@
-	+echo fossil >> $@
+	+echo frybox >> $@
+	+echo frybox >> $@
 	+echo $(LIBS) >> $@
 	+echo. >> $@
-	+echo fossil >> $@
+	+echo frybox >> $@
 
 translate$E: $(SRCDIR_tools)\translate.c
 	$(BCC) -o$@ $**

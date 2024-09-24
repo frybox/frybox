@@ -13,7 +13,7 @@
 #
 #     2. if errors are reported, fix them and go to step 1
 #
-#     3. if "fossil diff" reports changes in any of the generated
+#     3. if "frybox diff" reports changes in any of the generated
 #        files, commit the changed files to the repo
 #
 # Files generated include:
@@ -38,7 +38,7 @@
 #
 set srcDir ../src
 # Directory $srcDirExt houses single-file source code solutions which
-# are imported directly into the fossil source tree.
+# are imported directly into the frybox source tree.
 set srcDirExt ../extsrc
 
 # Basenames of all source files that get preprocessed using
@@ -287,7 +287,7 @@ lappend SHELL_WIN32_OPTIONS -Dfopen=fossil_fopen
 
 # Name of the final application
 #
-set name fossil
+set name frybox
 
 # The "writeln" command sends output to the target makefile.
 #
@@ -666,7 +666,7 @@ PREFIX =
 # PREFIX = i686-w64-mingw32-
 # PREFIX = x86_64-w64-mingw32-
 
-#### The toplevel directory of the source tree.  Fossil can be built
+#### The toplevel directory of the source tree.  frybox can be built
 #    in a directory that is separate from the source tree.  Just change
 #    the following to point from the build directory to the src/ folder.
 #
@@ -705,7 +705,7 @@ BCC = $(BCCEXE)
 #
 # FOSSIL_ENABLE_SSL = 1
 
-#### Automatically build OpenSSL when building Fossil (causes rebuild
+#### Automatically build OpenSSL when building frybox (causes rebuild
 #    issues when building incrementally).
 #
 # FOSSIL_BUILD_SSL = 1
@@ -766,7 +766,7 @@ endif
 ZINCDIR = $(SRCDIR)/../compat/zlib
 ZLIBDIR = $(SRCDIR)/../compat/zlib
 
-#### Make an attempt to detect if Fossil is being built for the x64 processor
+#### Make an attempt to detect if frybox is being built for the x64 processor
 #    architecture.  This check may be somewhat fragile due to "findstring".
 #
 ifndef X64
@@ -795,7 +795,7 @@ endif
 SSLCONFIG += no-ssl3 no-weak-ssl-ciphers no-shared
 
 #### When using zlib, make sure that OpenSSL is configured to use the zlib
-#    that Fossil knows about (i.e. the one within the source tree).
+#    that frybox knows about (i.e. the one within the source tree).
 #
 SSLCONFIG +=  --with-zlib-lib=$(PWD)/$(ZLIBDIR) --with-zlib-include=$(PWD)/$(ZLIBDIR) zlib
 
@@ -812,7 +812,7 @@ OPENSSLLIBDIR = $(OPENSSLDIR)
 #    this points to the Tcl source code directory, this directory must
 #    have "generic" and "win" sub-directories.  The recommended usage
 #    here is to use the Sysinternals junction tool to create a hard
-#    link between a "tcl-8.x" sub-directory of the Fossil source code
+#    link between a "tcl-8.x" sub-directory of the frybox source code
 #    directory and the target Tcl directory.  This removes the need to
 #    hard-code the necessary paths in this Makefile.
 #
@@ -845,7 +845,7 @@ endif
 #### C compiler for use in building executables that will run on the
 #    target platform.  This is usually the same as BCCEXE, unless you
 #    are cross-compiling.  This C compiler builds the finished binary
-#    for fossil.  See BCC and BCCEXE above for the C compiler for
+#    for frybox.  See BCC and BCCEXE above for the C compiler for
 #    building intermediate code-generator tools.
 #
 TCCEXE = gcc
@@ -853,7 +853,7 @@ TCCEXE = gcc
 #### C compiler and options for use in building executables that will
 #    run on the target platform.  This is usually the almost the same
 #    as BCC, unless you are cross-compiling.  This C compiler builds
-#    the finished binary for fossil.  The BCC compiler above is used
+#    the finished binary for frybox.  The BCC compiler above is used
 #    for building intermediate code-generator tools.
 #
 TCC = $(PREFIX)$(TCCEXE) -Wall -Wdeclaration-after-statement
@@ -992,7 +992,7 @@ ifdef FOSSIL_ENABLE_TCL
 LIB += $(LIBTCL)
 endif
 
-#### Extra arguments for linking the finished binary.  Fossil needs
+#### Extra arguments for linking the finished binary.  frybox needs
 #    to link against the Z-Lib compression library.  There are no
 #    other mandatory dependencies.
 #
@@ -1019,7 +1019,7 @@ endif
 #
 LIB += -ldnsapi
 
-#### Tcl shell for use in running the fossil test suite.  This is only
+#### Tcl shell for use in running the frybox test suite.  This is only
 #    used for testing.
 #
 TCLSH = tclsh
@@ -1105,17 +1105,17 @@ endif}
 writeln {
 all:	$(OBJDIR) $(APPNAME)
 
-$(OBJDIR)/fossil.o:	$(SRCDIR)/../win/fossil.rc $(OBJDIR)/VERSION.h
+$(OBJDIR)/frybox.o:	$(SRCDIR)/../win/frybox.rc $(OBJDIR)/VERSION.h
 ifdef USE_WINDOWS
-	$(CP) $(subst /,\,$(SRCDIR)\..\win\fossil.rc) $(subst /,\,$(OBJDIR))
-	$(CP) $(subst /,\,$(SRCDIR)\..\win\fossil.ico) $(subst /,\,$(OBJDIR))
-	$(CP) $(subst /,\,$(SRCDIR)\..\win\fossil.exe.manifest) $(subst /,\,$(OBJDIR))
+	$(CP) $(subst /,\,$(SRCDIR)\..\win\frybox.rc) $(subst /,\,$(OBJDIR))
+	$(CP) $(subst /,\,$(SRCDIR)\..\win\frybox.ico) $(subst /,\,$(OBJDIR))
+	$(CP) $(subst /,\,$(SRCDIR)\..\win\frybox.exe.manifest) $(subst /,\,$(OBJDIR))
 else
-	$(CP) $(SRCDIR)/../win/fossil.rc $(OBJDIR)
-	$(CP) $(SRCDIR)/../win/fossil.ico $(OBJDIR)
-	$(CP) $(SRCDIR)/../win/fossil.exe.manifest $(OBJDIR)
+	$(CP) $(SRCDIR)/../win/frybox.rc $(OBJDIR)
+	$(CP) $(SRCDIR)/../win/frybox.ico $(OBJDIR)
+	$(CP) $(SRCDIR)/../win/frybox.exe.manifest $(OBJDIR)
 endif
-	$(RCC) $(OBJDIR)/fossil.rc -o $(OBJDIR)/fossil.o
+	$(RCC) $(OBJDIR)/frybox.rc -o $(OBJDIR)/frybox.o
 
 install:	$(OBJDIR) $(APPNAME)
 ifdef USE_WINDOWS
@@ -1238,9 +1238,9 @@ ifdef FOSSIL_BUILD_SSL
 APPTARGETS += openssl
 endif
 
-$(APPNAME):	$(APPTARGETS) $(OBJDIR)/headers $(CODECHECK1) $(EXTRAOBJ) $(OBJ) $(OBJDIR)/fossil.o
+$(APPNAME):	$(APPTARGETS) $(OBJDIR)/headers $(CODECHECK1) $(EXTRAOBJ) $(OBJ) $(OBJDIR)/frybox.o
 	$(CODECHECK1) $(TRANS_SRC)
-	$(TCC) -o $@ $(EXTRAOBJ) $(OBJ) $(OBJDIR)/fossil.o $(LIB)
+	$(TCC) -o $@ $(EXTRAOBJ) $(OBJ) $(OBJDIR)/frybox.o $(LIB)
 
 # This rule prevents make from using its default rules to try build
 # an executable named "manifest" out of the file named "manifest.c"
@@ -1258,10 +1258,10 @@ else
 endif
 
 setup: $(OBJDIR) $(APPNAME)
-	$(MAKENSIS) ./setup/fossil.nsi
+	$(MAKENSIS) ./setup/frybox.nsi
 
 innosetup: $(OBJDIR) $(APPNAME)
-	$(INNOSETUP) ./setup/fossil.iss -DAppVersion=$(shell $(CAT) ./VERSION)
+	$(INNOSETUP) ./setup/frybox.iss -DAppVersion=$(shell $(CAT) ./VERSION)
 }
 
 set mhargs {}
@@ -1402,7 +1402,7 @@ writeln {
 RC=$(DMDIR)\bin\rcc
 RCFLAGS=-32 -w1 -I$(SRCDIR) /D__DMC__
 
-APPNAME = $(OBJDIR)\fossil$(E)
+APPNAME = $(OBJDIR)\frybox$(E)
 
 all: $(APPNAME)
 
@@ -1411,20 +1411,20 @@ $(APPNAME) : translate$E mkindex$E codecheck1$E headers  $(OBJ) $(OBJDIR)\link
 	codecheck1$E $(SRC)
 	$(DMDIR)\bin\link @link
 
-$(OBJDIR)\fossil.res:	$B\win\fossil.rc
+$(OBJDIR)\frybox.res:	$B\win\frybox.rc
 	$(RC) $(RCFLAGS) -o$@ $**
 
-$(OBJDIR)\link: $B\win\Makefile.dmc $(OBJDIR)\fossil.res}
+$(OBJDIR)\link: $B\win\Makefile.dmc $(OBJDIR)\frybox.res}
 writeln -nonewline "\t+echo "
 foreach s [lsort $src] {
   writeln -nonewline "$s "
 }
 writeln "shell sqlite3 th th_lang > \$@"
-writeln "\t+echo fossil >> \$@"
-writeln "\t+echo fossil >> \$@"
+writeln "\t+echo frybox >> \$@"
+writeln "\t+echo frybox >> \$@"
 writeln "\t+echo \$(LIBS) >> \$@"
 writeln "\t+echo. >> \$@"
-writeln "\t+echo fossil >> \$@"
+writeln "\t+echo frybox >> \$@"
 
 writeln {
 translate$E: $(SRCDIR_tools)\translate.c
@@ -1552,12 +1552,12 @@ INSTALLDIR = $(DESTDIR)\$(INSTALLDIR)
 # When building out of source, this Makefile needs to know the path to the base
 # top-level directory for this project. Pass it on NMAKE command line via make
 # variable B:
-#   NMAKE /f "path\to\this\Makefile" B="path/to/fossil/root"
+#   NMAKE /f "path\to\this\Makefile" B="path/to/frybox/root"
 #
 # NOTE: Make sure B path has no trailing backslash, UNIX-style path is OK too.
 #
-!if !exist("$(B)\.fossil-settings")
-!error Please specify path to project base directory: B="path/to/fossil"
+!if !exist("$(B)\manifest.uuid")
+!error Please specify path to project base directory: B="path/to/frybox"
 !endif
 
 # Perl is only necessary if OpenSSL support is enabled and it is built from
@@ -1874,10 +1874,10 @@ foreach s [lsort [concat $src $AdditionalObj]] {
 if {$i > 0} {
   writeln " \\"
 }
-writeln -nonewline "        \"\$(OX)\\fossil.res\"\n\n"
+writeln -nonewline "        \"\$(OX)\\frybox.res\"\n\n"
 writeln [string map [list <<<NEXT_LINE>>> \\] {
 !ifndef BASEAPPNAME
-BASEAPPNAME = fossil
+BASEAPPNAME = frybox
 !endif
 
 APPNAME     = $(OX)\$(BASEAPPNAME)$(E)
@@ -1925,7 +1925,7 @@ openssl:
 !if $(FOSSIL_ENABLE_WINXP)!=0 && $(FOSSIL_DYNAMIC_BUILD)!=0
 #
 # NOTE: Appending custom linker flags to the OpenSSL default linker flags is
-# somewhat difficult, as summarized in this Fossil Forum post:
+# somewhat difficult, as summarized in this frybox Forum post:
 #
 #   https://fossil-scm.org/forum/forumpost/a9a2d6af28b
 #
@@ -1963,9 +1963,9 @@ APPTARGETS = $(APPTARGETS) openssl
 
 "$(APPNAME)" : $(APPTARGETS) "$(OBJDIR)\translate$E" "$(OBJDIR)\mkindex$E" "$(OBJDIR)\codecheck1$E" "$(OX)\headers" $(OBJ) "$(OX)\linkopts"
 	"$(OBJDIR)\codecheck1$E" $(SRC)
-	link $(LDFLAGS) /OUT:$@ /PDB:$(@D)\ $(LIBDIR) Wsetargv.obj "$(OX)\fossil.res" @"$(OX)\linkopts"
-	if exist "$(B)\win\fossil.exe.manifest" <<<NEXT_LINE>>>
-		$(MTC) -nologo -manifest "$(B)\win\fossil.exe.manifest" -outputresource:$@;1
+	link $(LDFLAGS) /OUT:$@ /PDB:$(@D)\ $(LIBDIR) Wsetargv.obj "$(OX)\frybox.res" @"$(OX)\linkopts"
+	if exist "$(B)\win\frybox.exe.manifest" <<<NEXT_LINE>>>
+		$(MTC) -nologo -manifest "$(B)\win\frybox.exe.manifest" -outputresource:$@;1
 
 "$(OX)\linkopts": "$(B)\win\Makefile.msc"}]
 set redir {>}
@@ -2108,7 +2108,7 @@ foreach s [lsort $src] {
   writeln "\t\"\$(OBJDIR)\\translate\$E\" \$** > \$@\n"
 }
 
-writeln "\"\$(OX)\\fossil.res\" : \"\$(B)\\win\\fossil.rc\""
+writeln "\"\$(OX)\\frybox.res\" : \"\$(B)\\win\\frybox.rc\""
 writeln "\t\$(RCC) /fo \$@ \$**\n"
 
 writeln "\"\$(OX)\\headers\": \"\$(OBJDIR)\\makeheaders\$E\" \"\$(OX)\\page_index.h\" \"\$(OX)\\builtin_data.h\" \"\$(OX)\\VERSION.h\""

@@ -206,7 +206,7 @@ void clone_cmd(void){
   }
   /* Fail before clone if open will fail because inside an open check-out */
   if( zWorkDir!=0 && zWorkDir[0]!=0 && !noOpen ){
-    if( db_open_local_v2(0, allowNested) ){
+    if( db_open_local_v2(allowNested) ){
       fossil_fatal("there is already an open tree at %s", g.zLocalRoot);
     }
   }
