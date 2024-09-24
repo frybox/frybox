@@ -7,52 +7,52 @@
 ;
 
 ; The name of the installer
-Name "Fossil"
+Name "Frybox"
 
 ; The file to write
-OutFile "fossil-setup.exe"
+OutFile "frybox-setup.exe"
 
 ; The default installation directory
-InstallDir $PROGRAMFILES\Fossil
+InstallDir $PROGRAMFILES\Frybox
 ; Registry key to check for directory (so if you install again, it will
 ; overwrite the old one automatically)
-InstallDirRegKey HKLM SOFTWARE\Fossil "Install_Dir"
+InstallDirRegKey HKLM SOFTWARE\Frybox "Install_Dir"
 
 ; The text to prompt the user to enter a directory
-ComponentText "This will install fossil on your computer."
+ComponentText "This will install frybox on your computer."
 ; The text to prompt the user to enter a directory
 DirText "Choose a directory to install in to:"
 
 ; The stuff to install
-Section "Fossil (required)"
+Section "Frybox (required)"
   ; Set output path to the installation directory.
   SetOutPath $INSTDIR
   ; Put file there
-  File "..\fossil.exe"
+  File "..\frybox.exe"
   ; Write the installation path into the registry
-  WriteRegStr HKLM SOFTWARE\Fossil "Install_Dir" "$INSTDIR"
+  WriteRegStr HKLM SOFTWARE\Frybox "Install_Dir" "$INSTDIR"
   ; Write the uninstall keys for Windows
-  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\Fossil" "DisplayName" "Fossil (remove only)"
-  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\Fossil" "UninstallString" '"$INSTDIR\uninstall.exe"'
+  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\Frybox" "DisplayName" "Frybox (remove only)"
+  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\Frybox" "UninstallString" '"$INSTDIR\uninstall.exe"'
   WriteUninstaller "uninstall.exe"
 SectionEnd
 
 
 ; uninstall stuff
 
-UninstallText "This will uninstall fossil. Hit next to continue."
+UninstallText "This will uninstall frybox. Hit next to continue."
 
 ; special uninstall section.
 Section "Uninstall"
   ; remove registry keys
-  DeleteRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\Fossil"
-  DeleteRegKey HKLM SOFTWARE\Fossil
+  DeleteRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\Frybox"
+  DeleteRegKey HKLM SOFTWARE\Frybox
   ; remove files
-  Delete $INSTDIR\fossil.exe
+  Delete $INSTDIR\frybox.exe
   ; MUST REMOVE UNINSTALLER, too
   Delete $INSTDIR\uninstall.exe
   ; remove shortcuts, if any.
-  RMDir "$SMPROGRAMS\Fossil"
+  RMDir "$SMPROGRAMS\Frybox"
   RMDir "$INSTDIR"
 SectionEnd
 

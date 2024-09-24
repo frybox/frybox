@@ -958,7 +958,7 @@ OBJ = \
  $(OBJDIR)/xfersetup.o \
  $(OBJDIR)/zip.o
 
-APPNAME    = fossil.exe
+APPNAME    = frybox.exe
 APPTARGETS =
 
 #### If the USE_WINDOWS variable exists, it is assumed that we are building
@@ -1000,17 +1000,17 @@ endif
 
 all:	$(OBJDIR) $(APPNAME)
 
-$(OBJDIR)/fossil.o:	$(SRCDIR)/../win/fossil.rc $(OBJDIR)/VERSION.h
+$(OBJDIR)/frybox.o:	$(SRCDIR)/../win/frybox.rc $(OBJDIR)/VERSION.h
 ifdef USE_WINDOWS
-	$(CP) $(subst /,\,$(SRCDIR)\..\win\fossil.rc) $(subst /,\,$(OBJDIR))
-	$(CP) $(subst /,\,$(SRCDIR)\..\win\fossil.ico) $(subst /,\,$(OBJDIR))
-	$(CP) $(subst /,\,$(SRCDIR)\..\win\fossil.exe.manifest) $(subst /,\,$(OBJDIR))
+	$(CP) $(subst /,\,$(SRCDIR)\..\win\frybox.rc) $(subst /,\,$(OBJDIR))
+	$(CP) $(subst /,\,$(SRCDIR)\..\win\frybox.ico) $(subst /,\,$(OBJDIR))
+	$(CP) $(subst /,\,$(SRCDIR)\..\win\frybox.exe.manifest) $(subst /,\,$(OBJDIR))
 else
-	$(CP) $(SRCDIR)/../win/fossil.rc $(OBJDIR)
-	$(CP) $(SRCDIR)/../win/fossil.ico $(OBJDIR)
-	$(CP) $(SRCDIR)/../win/fossil.exe.manifest $(OBJDIR)
+	$(CP) $(SRCDIR)/../win/frybox.rc $(OBJDIR)
+	$(CP) $(SRCDIR)/../win/frybox.ico $(OBJDIR)
+	$(CP) $(SRCDIR)/../win/frybox.exe.manifest $(OBJDIR)
 endif
-	$(RCC) $(OBJDIR)/fossil.rc -o $(OBJDIR)/fossil.o
+	$(RCC) $(OBJDIR)/frybox.rc -o $(OBJDIR)/frybox.o
 
 install:	$(OBJDIR) $(APPNAME)
 ifdef USE_WINDOWS
@@ -1131,9 +1131,9 @@ ifdef FOSSIL_BUILD_SSL
 APPTARGETS += openssl
 endif
 
-$(APPNAME):	$(APPTARGETS) $(OBJDIR)/headers $(CODECHECK1) $(EXTRAOBJ) $(OBJ) $(OBJDIR)/fossil.o
+$(APPNAME):	$(APPTARGETS) $(OBJDIR)/headers $(CODECHECK1) $(EXTRAOBJ) $(OBJ) $(OBJDIR)/frybox.o
 	$(CODECHECK1) $(TRANS_SRC)
-	$(TCC) -o $@ $(EXTRAOBJ) $(OBJ) $(OBJDIR)/fossil.o $(LIB)
+	$(TCC) -o $@ $(EXTRAOBJ) $(OBJ) $(OBJDIR)/frybox.o $(LIB)
 
 # This rule prevents make from using its default rules to try build
 # an executable named "manifest" out of the file named "manifest.c"
@@ -1151,10 +1151,10 @@ else
 endif
 
 setup: $(OBJDIR) $(APPNAME)
-	$(MAKENSIS) ./setup/fossil.nsi
+	$(MAKENSIS) ./setup/frybox.nsi
 
 innosetup: $(OBJDIR) $(APPNAME)
-	$(INNOSETUP) ./setup/fossil.iss -DAppVersion=$(shell $(CAT) ./VERSION)
+	$(INNOSETUP) ./setup/frybox.iss -DAppVersion=$(shell $(CAT) ./VERSION)
 
 $(OBJDIR)/page_index.h: $(TRANS_SRC) $(MKINDEX)
 	$(MKINDEX) $(TRANS_SRC) >$@

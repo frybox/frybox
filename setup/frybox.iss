@@ -1,5 +1,5 @@
 ;
-; Copyright (c) 2014 D. Richard Hipp
+; Copyright (c) 2024 Ju Zejian
 ;
 ; This program is free software; you can redistribute it and/or
 ; modify it under the terms of the Simplified BSD License (also
@@ -10,28 +10,28 @@
 ; merchantability or fitness for a particular purpose.
 ;
 ; Author contact information:
-;   drh@hwaci.com
-;   http://www.hwaci.com/drh/
+;   frybox123@gmail.com
+;   http://www.frybox.org
 ;
 
 [Setup]
 ArchitecturesAllowed=x86 x64
 AlwaysShowComponentsList=false
-AppCopyright=Copyright (c) D. Richard Hipp.  All rights reserved.
+AppCopyright=Copyright (c) Ju Zejian  All rights reserved.
 AppID={{f1c25a1f-3954-4e1a-ac36-4314c52f057c}
-AppName=Fossil
-AppPublisher=Fossil Development Team
-AppPublisherURL=https://fossil-scm.org/
-AppSupportURL=https://fossil-scm.org/
-AppUpdatesURL=https://fossil-scm.org/
+AppName=Frybox
+AppPublisher=Frybox Development Team
+AppPublisherURL=https://frybox.org/
+AppSupportURL=https://frybox.org/
+AppUpdatesURL=https://frybox.org/
 AppVerName=Fossil v{#AppVersion}
 AppVersion={#AppVersion}
 AppComments=Simple, high-reliability, distributed software configuration management system.
-AppReadmeFile=https://fossil-scm.org/home/doc/tip/www/quickstart.wiki
-DefaultDirName={pf}\Fossil
-DefaultGroupName=Fossil
-OutputBaseFilename=fossil-win32-{#AppVersion}
-OutputManifestFile=fossil-win32-{#AppVersion}-manifest.txt
+AppReadmeFile=https://frybox.org/home/doc/tip/www/quickstart.wiki
+DefaultDirName={pf}\Frybox
+DefaultGroupName=Frybox
+OutputBaseFilename=frybox-win32-{#AppVersion}
+OutputManifestFile=frybox-win32-{#AppVersion}-manifest.txt
 SetupLogging=true
 UninstallFilesDir={app}\uninstall
 VersionInfoVersion={#AppVersion}
@@ -43,7 +43,7 @@ Name: Application; Description: Core application.; Types: custom compact full; F
 Name: {app}\bin
 
 [Files]
-Components: Application; Source: ..\fossil.exe; DestDir: {app}\bin; Flags: restartreplace uninsrestartdelete
+Components: Application; Source: ..\frybox.exe; DestDir: {app}\bin; Flags: restartreplace uninsrestartdelete
 
 [Registry]
-Components: Application; Root: HKLM32; SubKey: Software\Fossil; ValueType: string; ValueName: Install_Dir; ValueData: {app}; Flags: uninsdeletekeyifempty uninsdeletevalue
+Components: Application; Root: HKLM32; SubKey: Software\Frybox; ValueType: string; ValueName: Install_Dir; ValueData: {app}; Flags: uninsdeletekeyifempty uninsdeletevalue

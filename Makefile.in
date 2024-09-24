@@ -71,9 +71,9 @@ SQLITE3_ORIGIN = @SQLITE3_ORIGIN@
 USE_LINENOISE = @USE_LINENOISE@
 USE_MMAN_H = @USE_MMAN_H@
 USE_SEE = @USE_SEE@
-APPNAME = fossil
+APPNAME = frybox
 #
-# APPNAME = fossil-fuzz
+# APPNAME = frybox-fuzz
 # may be more appropriate for fuzzing.
 
 #### Emscripten stuff for optionally doing in-tree builds

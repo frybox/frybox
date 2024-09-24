@@ -106,6 +106,6 @@ TCC.NetBSD += -DUSE_PREAD
 TCC.OpenBSD += -DUSE_PREAD
 TCC += $(TCC.$(HOST_OS))
 
-APPNAME = fossil$(E)
+APPNAME = frybox$(E)
 .PHONY: all tags
 include $(SRCDIR)/main.mk
