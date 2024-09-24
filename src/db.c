@@ -3249,7 +3249,9 @@ void db_initial_setup(
 */
 void create_repository_cmd(void){
   char zRepoDir[2000];
-  int n, rc;
+  int n;
+  char *zRepoDb;
+  char *zLocalDb;
   char *zPassword;
   const char *zTemplate;      /* Repository from which to copy settings */
   const char *zDate;          /* Date of the initial check-in */
@@ -3258,7 +3260,6 @@ void create_repository_cmd(void){
   const char *zProjectDesc;   /* Optional project description "description
                               ** of project in quotes" */
   int bUseSha1 = 0;           /* True to set the hash-policy to sha1 */
-
 
   zTemplate = find_option("template",0,1);
   zDate = find_option("date-override",0,1);
@@ -3287,13 +3288,10 @@ void create_repository_cmd(void){
   if( file_chdir(zRepoDir, 0) ){
     fossil_fatal("cannot change directory to %s", zRepoDir);
   }
-  n = strlen(zRepoDir);
-  sqlite3_snprintf(sizeof(zRepoDir)-n, &zRepoDir[n], "/repository.db");
-
-# define REPODB_NAME "./repository.db"
-  db_create_repository(REPODB_NAME);
-  db_open_repository(REPODB_NAME);
-# undef REPODB_NAME
+  zRepoDb = file_canonical_name_dup("./repository.db");
+  zLocalDb = file_canonical_name_dup("./local.db");
+  db_create_repository(zRepoDb);
+  db_open_repository(zRepoDb);
   db_open_config(0, 0);
   if( zTemplate ) db_attach(zTemplate, "settingSrc");
   db_begin_transaction();
@@ -3316,18 +3314,18 @@ void create_repository_cmd(void){
                g.zLogin, zPassword);
   hash_user_password(g.zLogin);
 
-# define LOCALDB_NAME "./local.db"
-  db_init_database(LOCALDB_NAME, zLocalSchema, zLocalSchemaVmerge,
+  db_init_database(zLocalDb, zLocalSchema, zLocalSchemaVmerge,
 #ifdef FOSSIL_LOCAL_WAL
                    "COMMIT; PRAGMA journal_mode=WAL; BEGIN;",
 #endif
                    (char*)0);
-  db_delete_on_failure(LOCALDB_NAME);
-# undef LOCALDB_NAME
+  db_delete_on_failure(zLocalDb);
   db_open_local(0);
-  db_lset("repository", zRepoDir);
-  db_record_repository_filename(zRepoDir);
+  db_lset("repository", zRepoDb);
+  db_record_repository_filename(zRepoDb);
   db_set_checkout(0);
+  fossil_free(zRepoDb);
+  fossil_free(zLocalDb);
 }
 
 /*
