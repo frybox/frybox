@@ -2338,7 +2338,7 @@ static char *db_configdb_name(int isOptional){
                  "variables");
   }
 
-  /* Step 4: If $HOME/.config is a directory -> $HOME/.config/fossil.db
+  /* Step 4: If $HOME/.config is a directory -> $HOME/.config/frybox.db
   */
   zXdgHome = mprintf("%s/.config", zHome);
   if( file_isdir(zXdgHome, ExtFILE)==1 ){
