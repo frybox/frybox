@@ -73,8 +73,9 @@ const char zRepositorySchema1[] =
 @   boffset INTEGER,                -- Begin offset in the nodes file
 @   eoffset INTEGER,                -- End offset，one pass the last byte
 @   type TEXT,                      -- Type of node: list, atom
-@   uuid TEXT UNIQUE NOT NULL,      -- Hash of the node
-@   CHECK( length(uuid)>=40 AND nid>0 )
+@   nuuid TEXT UNIQUE NOT NULL,     -- Hash of the node
+@   muuid TEXT UNIQUE NOT NULL,     -- Hash of the manifest
+@   CHECK( length(nuuid)=64 AND length(muuid)=64 AND nid>0 )
 @ );
 @
 @ -- The ROOT table contains all root nodes in the repository.
@@ -84,7 +85,7 @@ const char zRepositorySchema1[] =
 @
 @ -- The PARTIAL table contains all partial nodes in the partial directory.
 @ CREATE TABLE partial(
-@   uuid TEXT UNIQUE NOT NULL,      -- Hash of the node
+@   nuuid TEXT UNIQUE NOT NULL,     -- Hash of the node
 @   size INTEGER,                   -- Current size of current content.
 @   total INTEGER                   -- Total size of this node.
 @ );
