@@ -65,31 +65,6 @@ const char zConfigSchema[] =
 ** operation.
 */
 const char zRepositorySchema1[] =
-@ -- The NODE table contains all nodes in the NODES file.
-@ -- Grow-only set
-@ CREATE TABLE node(
-@   nid INTEGER PRIMARY KEY,        -- Node ID
-@   size INTEGER,                   -- Size of node, including node line.
-@   boffset INTEGER,                -- Begin offset in the nodes file
-@   eoffset INTEGER,                -- End offset，one pass the last byte
-@   type TEXT,                      -- Type of node: list, atom
-@   nuuid TEXT UNIQUE NOT NULL,     -- Hash of the node
-@   muuid TEXT UNIQUE NOT NULL,     -- Hash of the manifest
-@   CHECK( length(nuuid)=64 AND length(muuid)=64 AND nid>0 )
-@ );
-@
-@ -- The ROOT table contains all root nodes in the repository.
-@ CREATE TABLE root(
-@   nid INTEGER PRIMARY KEY        -- Node ID
-@ );
-@
-@ -- The PARTIAL table contains all partial nodes in the partial directory.
-@ CREATE TABLE partial(
-@   nuuid TEXT UNIQUE NOT NULL,     -- Hash of the node
-@   size INTEGER,                   -- Current size of current content.
-@   total INTEGER                   -- Total size of this node.
-@ );
-@
 @ -- The BLOB and DELTA tables contain all records held in the repository.
 @ --
 @ -- The BLOB.CONTENT column is always compressed using zlib.  This
